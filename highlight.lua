@@ -32,8 +32,8 @@ local function attr_rule(text,i,j)
 end
 
 local function number_rule(text,i,j)
-  return text:sub(i-1,i-1):find('[%s%+%-%*/%(%)%[%]{},]?') and
-         text:sub(j+1,j+1):find('[%s%+%-%*/%(%)%[%]{},]?')
+  return text:sub(i-1,i-1):find('[%s%+%-%*/%(%)%[%]{},%%]') and
+         text:sub(j+1,j+1):find('[%s%+%-%*/%(%)%[%]{},%%]')
 end
 
 highlight.lua = {
@@ -72,5 +72,7 @@ highlight.lua = {
 }
 
 return highlight
+
+
 
 

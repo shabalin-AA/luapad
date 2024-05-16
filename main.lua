@@ -115,14 +115,23 @@ function text:remove(pos1, pos2)
 end
 
 function text:highlight(hl_table)
+  local str = ''
+  local i = 1
+  for line in self.str:gmatch('.-\n') do
+    if i >= numbers.start then
+      str = str..line
+    end
+    if i > numbers.start + lines_on_screen() then break end
+    i = i+1
+  end
   local indexes = {}
   for _,hl_entry in ipairs(hl_table) do
-    local i,j = self.str:find(hl_entry.to_hl, 0)
+    local i,j = str:find(hl_entry.to_hl, 0)
     while i do
-      if hl_entry.rule(self.str, i, j) then 
+      if hl_entry.rule(str, i, j) then 
         table.insert(indexes, {i, j, hl_entry.color})
       end
-      i,j = self.str:find(hl_entry.to_hl, j+1)
+      i,j = str:find(hl_entry.to_hl, j+1)
     end
   end
   local total_lines = math.max(self:count_lines(), 100)
@@ -144,13 +153,13 @@ function text:highlight(hl_table)
   for _,v in ipairs(indexes) do
     -- print(v[1], v[2], table.concat(v[3], ', '))
     table.insert(res, text_color)
-    table.insert(res, self.str:sub(j, v[1]-1))
+    table.insert(res, str:sub(j, v[1]-1))
     table.insert(res, v[3])
-    table.insert(res, self.str:sub(v[1], v[2]))
+    table.insert(res, str:sub(v[1], v[2]))
     j = v[2] + 1
   end
   table.insert(res, text_color)
-  table.insert(res, self.str:sub(j, -1))
+  table.insert(res, str:sub(j, -1))
   return res
 end
 
@@ -218,12 +227,25 @@ function love.load()
   love.keyboard.setKeyRepeat(true)
 end
 
+function sleep(a)
+  local sec = tonumber(os.clock() + a)
+  while os.clock() < sec do end
+end
+
+local sleep = 0
+function love.update(dt)
+  love.timer.sleep(sleep)
+  if love.timer.getFPS() > 80 then
+    sleep = sleep + 0.00001
+  end
+end
+
 function love.draw()
   love.graphics.setColor(comment_color)
   love.graphics.printf(numbers:str(), 0,0, numbers.width, 'right')
   selection:draw()
   love.graphics.setColor({1,1,1})
-  love.graphics.print(text:highlight(highlight.lua), numbers.width, text.y)
+  love.graphics.print(text:highlight(highlight.lua), numbers.width, 0)
   cursor:draw()
 end
 
@@ -335,5 +357,3 @@ end
 4. completion
 
 ]]
-
-
