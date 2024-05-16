@@ -1,3 +1,6 @@
+local highlight = require 'highlight'
+
+
 function last(t)
   return t[#t]
 end
@@ -16,8 +19,12 @@ function clamp(v, minv, maxv)
   else return v end
 end
 
+local default_fpath = '/tmp/text.txt'
+local actual_file = ''
+
 function read_file(fname)
   local file = io.open(fname, 'r')
+  if not file then return end
   local content = file:read('*all')
   file:close()
   return content
@@ -25,11 +32,10 @@ end
 
 function write_file(fname, str)
   local file = io.open(fname, 'w')
+  if not file then return end
   file:write(str)
   file:close()
 end
-
-local back_color = {0.1, 0.1, 0.12}
 
 local text = {}
 text.str = ''
@@ -58,6 +64,13 @@ end
 
 function lines_on_screen()
   return math.floor(love.graphics.getHeight() / font:getHeight())
+end
+
+function open_file(fname)
+  actual_file = fname or default_fpath
+  text.str = read_file(actual_file) or ''
+  text.str = text.str..'\n'
+  love.window.setTitle(actual_file)
 end
 
 function text:get_line(n)
@@ -99,6 +112,46 @@ function text:remove(pos1, pos2)
   local before = self.str:sub(1, pos1)
   local after = self.str:sub(pos2, -1)
   self.str = before..after
+end
+
+function text:highlight(hl_table)
+  local indexes = {}
+  for _,hl_entry in ipairs(hl_table) do
+    local i,j = self.str:find(hl_entry.to_hl, 0)
+    while i do
+      if hl_entry.rule(self.str, i, j) then 
+        table.insert(indexes, {i, j, hl_entry.color})
+      end
+      i,j = self.str:find(hl_entry.to_hl, j+1)
+    end
+  end
+  local total_lines = math.max(self:count_lines(), 100)
+  table.sort(indexes, function(a,b)
+    return (total_lines*a[1] + b[2]) < (total_lines*b[1] + a[2])
+  end)
+  local i = 2
+  while i <= #indexes do
+    local a = indexes[i-1]
+    local b = indexes[i]
+    if b[1] >= a[1] and b[2] <= a[2] then
+      table.remove(indexes, i)
+    else 
+      i = i + 1
+    end
+  end
+  local res = {}
+  local j = 1
+  for _,v in ipairs(indexes) do
+    -- print(v[1], v[2], table.concat(v[3], ', '))
+    table.insert(res, text_color)
+    table.insert(res, self.str:sub(j, v[1]-1))
+    table.insert(res, v[3])
+    table.insert(res, self.str:sub(v[1], v[2]))
+    j = v[2] + 1
+  end
+  table.insert(res, text_color)
+  table.insert(res, self.str:sub(j, -1))
+  return res
 end
 
 function numbers:str()
@@ -161,18 +214,16 @@ end
 function love.load()
   love.graphics.setBackgroundColor(back_color)
   update_font()
-  text.str = read_file(arg[2])
-  text.str = text.str..'\n'
-  love.window.setTitle(arg[2])
+  open_file(default_fpath)
   love.keyboard.setKeyRepeat(true)
 end
 
 function love.draw()
-  love.graphics.setColor(0.25,0.25,0.25)
+  love.graphics.setColor(comment_color)
   love.graphics.printf(numbers:str(), 0,0, numbers.width, 'right')
   selection:draw()
-  love.graphics.setColor(1,1,1)
-  love.graphics.print(text.str, numbers.width, text.y)
+  love.graphics.setColor({1,1,1})
+  love.graphics.print(text:highlight(highlight.lua), numbers.width, text.y)
   cursor:draw()
 end
 
@@ -189,13 +240,13 @@ function love.keypressed(key)
   end
   if love.keyboard.isDown('lgui') then
     if key == '=' then 
-      font_size = font_size+1
+      font_size = font_size + 1
       update_font()
     elseif key == '-' then
-      font_size = font_size-1
+      font_size = font_size - 1
       update_font()
     elseif key == 's' then
-      write_file(arg[2], text.str)
+      write_file(actual_file or default_fpath, text.str)
     elseif key == 'left' then 
       cursor.position[2] = 0
     elseif key == 'right' then
@@ -213,6 +264,8 @@ function love.keypressed(key)
     elseif key == 'backspace' then
       text:remove(cursor.position[3]-cursor.position[2]+1, cursor.position[3])
       cursor.position[2] = 0
+    elseif key == 'o' then
+      open_file(text:get_line(1))
     end
   else
     if selection.active then 
@@ -232,13 +285,19 @@ function love.keypressed(key)
         cursor.position[1] = cursor.position[1] - 1
         cursor.position[2] = #text:get_line(cursor.position[1])
       else
-        cursor.position[2] = cursor.position[2]-1
+        cursor.position[2] = cursor.position[2] - 1
       end
     elseif key == 'return' then
-      text:insert('\n')
+      local cur_str = text:get_line(cursor.position[1])
+      local i,j = cur_str:find('%s*')
+      local indentation = cur_str:sub(i,j)
+      text:insert('\n'..indentation)
       cursor.position[1] = cursor.position[1] + 1
+      cursor.position[2] = #indentation
     elseif key == 'tab' then
       text:insert('  ')
+    elseif key == 'escape' then
+      open_file(default_fpath)
     end
   end
   cursor:update()
@@ -257,20 +316,24 @@ end
 function love.mousepressed(mx, my, button)
   if mx > numbers.width then
     cursor.position = {
-      1 + math.floor(my / font:getHeight()),
+      numbers.start + math.floor(my / font:getHeight()),
       math.floor((mx - numbers.width) / font:getWidth(' '))
     }
     cursor:update()
   end
 end
 
+function love.filedropped(file)
+  open_file(file:getFilename())
+end
 
 --[[
 
   TODO:
 1. selection
-2. code highlighting
 3. go to line (status bar)
-4. substitution
+4. completion
 
 ]]
+
+
