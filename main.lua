@@ -163,6 +163,22 @@ function text:highlight(hl_table)
   return res
 end
 
+function text:find_word_end()
+  local line = self:get_line(cursor.position[1])..' '
+  local i = line:find('[%a%d]%s', cursor.position[2]+1)
+  return i or #line
+end
+
+
+function text:find_word_beg()
+  local s = self:get_line(cursor.position[1])
+  local i = cursor.position[2]
+  repeat
+    i = i - 1
+  until s:sub(i,i):find('%s') or i <= 0
+  return i
+end
+
 function numbers:str()
   local end_number = self.start + lines_on_screen()
   local delimiter = '|'
@@ -246,6 +262,7 @@ function love.draw()
   selection:draw()
   love.graphics.setColor({1,1,1})
   love.graphics.print(text:highlight(highlight.lua), numbers.width, 0)
+  love.graphics.setColor(text_color)
   cursor:draw()
 end
 
@@ -289,10 +306,21 @@ function love.keypressed(key)
     elseif key == 'o' then
       open_file(text:get_line(1))
     end
-  else
-    if selection.active then 
-      table.insert(last(selection.intervals), cursor.position[3]) 
+  elseif love.keyboard.isDown('lalt') then
+    if key == 'left' then
+      cursor.position[2] = text:find_word_beg()
+    elseif key == 'right' then
+      cursor.position[2] = text:find_word_end()
+    elseif key == 'up' then
+      cursor.position[1] = cursor.position[1] - lines_on_screen()
+    elseif key == 'down' then
+      cursor.position[1] = cursor.position[1] + lines_on_screen()
+    elseif key == 'backspace' then
+      local toremove = cursor.position[2] - text:find_word_beg()
+      text:remove(cursor.position[3] - toremove, cursor.position[3])
+      cursor.position[2] = cursor.position[2] - toremove
     end
+  else
     if key == 'left' then
       cursor.position[2] = cursor.position[2] - 1
     elseif key == 'right' then
@@ -349,11 +377,14 @@ function love.filedropped(file)
   open_file(file:getFilename())
 end
 
+
 --[[
 
   TODO:
 1. selection
+2. file browser
 3. go to line (status bar)
 4. completion
+5. search 
 
 ]]
