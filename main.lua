@@ -1,6 +1,8 @@
 local highlight = require 'highlight'
 
 
+function id(x) return x end
+
 function last(t)
   return t[#t]
 end
@@ -19,9 +21,6 @@ function clamp(v, minv, maxv)
   else return v end
 end
 
-local default_fpath = '/tmp/text.txt'
-local actual_file = ''
-
 function read_file(fname)
   local file = io.open(fname, 'r')
   if not file then return end
@@ -37,9 +36,13 @@ function write_file(fname, str)
   file:close()
 end
 
+
+local directory = nil
+local file = nil
+local default_fpath = '/tmp/text.txt'
+
 local text = {}
 text.str = ''
-text.y = 0
 
 local font_size = 22
 local font = nil
@@ -53,8 +56,10 @@ cursor.position = {1,0,0} -- line, char in line, char in whole text
 cursor.t = os.clock() -- for blinking
 
 local selection = {}
+selection.color = {0.7, 0.7, 0.7}
 selection.active = false
-selection.intervals = {}
+-- begin position that copies cursor position
+selection.beg_pos = {0,0,0}
 
 
 function update_font()
@@ -67,10 +72,36 @@ function lines_on_screen()
 end
 
 function open_file(fname)
-  actual_file = fname or default_fpath
-  text.str = read_file(actual_file) or ''
-  text.str = text.str..'\n'
-  love.window.setTitle(actual_file)
+  file = fname or default_fpath
+  directory = nil
+  love.window.setTitle(file)
+  text.str = read_file(file) or ''
+  text.str = text.str
+end
+
+function open_directory(path)
+  directory = path or '/'
+  file = nil
+  love.window.setTitle(directory)
+  local cmd = 'ls -a '..directory
+  local handle = io.popen(cmd)
+  text.str = ''
+  for line in handle:lines() do
+    text.str = text.str..line..'\n'
+  end
+end
+
+function open(path)
+  cursor.position = {1,0,0}
+  numbers.start = 1
+  local cmd = 'file '..path
+  local handle = io.popen(cmd)
+  local content = handle:read('*all')
+  if content:find('directory') then
+    open_directory((directory or '')..'/'..path)
+  elseif content:find('text') then
+    open_file(path)
+  end
 end
 
 function text:get_line(n)
@@ -78,7 +109,7 @@ function text:get_line(n)
   for i=1,n-1 do
     line_beg = self.str:find('\n', line_beg+1)
   end
-  local line_end = self.str:find('\n', line_beg+1)
+  local line_end = self.str:find('\n', line_beg+1) or 1
   return self.str:sub(line_beg+1, line_end-1)
 end
 
@@ -88,14 +119,6 @@ function text:count_lines()
     res = res + 1
   end
   return res
-end
-
-function text:move(y)
-  local font_height = font:getHeight()
-  self.y = self.y + y*font_height
-  self.y = clamp(text.y, -(self:count_lines()-1)*font_height, 0)
-  numbers.start = 1 - self.y/font_height
-  cursor.position[1] = clamp(cursor.position[1], numbers.start, numbers.start + lines_on_screen()-1)
 end
 
 function text:insert(t)
@@ -163,20 +186,18 @@ function text:highlight(hl_table)
   return res
 end
 
+local separators = '[%s%+%-=%*/:;%%,%.%(%)%[%]]'
+
 function text:find_word_end()
   local line = self:get_line(cursor.position[1])..' '
-  local i = line:find('[%a%d]%s', cursor.position[2]+1)
-  return i or #line
+  local i,j = line:find('.-'..separators, cursor.position[2]+1)
+  return j or #line
 end
 
-
 function text:find_word_beg()
-  local s = self:get_line(cursor.position[1])
-  local i = cursor.position[2]
-  repeat
-    i = i - 1
-  until s:sub(i,i):find('%s') or i <= 0
-  return i
+  local line = self:get_line(cursor.position[1]):sub(1, cursor.position[2]-1)
+  local i,j = line:find('.*'..separators)
+  return j or 0
 end
 
 function numbers:str()
@@ -195,16 +216,16 @@ function numbers:str()
 end
 
 function cursor:blink()
-  local elapsed = os.clock() - self.t
-  return 0 < elapsed%0.1 and elapsed%0.1 < 0.05 
+  local elapsed = (os.clock() - self.t) % 0.1
+  return 0 < elapsed and elapsed < 0.05 
 end
 
 function cursor:draw()
   if self:blink() then
     love.graphics.setLineWidth(1)
-    local x = numbers.width + font:getWidth(string.rep(' ', self.position[2]))
-    local y1 = text.y + (self.position[1]-1)*font:getHeight()
-    local y2 = text.y + (self.position[1]-0)*font:getHeight()
+    local x = numbers.width + self.position[2] * font:getWidth(' ')
+    local y1 = (self.position[1] - numbers.start + 0)*font:getHeight()
+    local y2 = (self.position[1] - numbers.start + 1)*font:getHeight()
     love.graphics.line(x,y1,x,y2)
     self.t = 0
   end
@@ -224,15 +245,53 @@ function cursor:update()
     self.position[3] = self.position[3] + #text:get_line(i) + 1
   end
   self.position[3] = self.position[3] + self.position[2]
-  local y_lines = self.position[1] - numbers.start
-  text:move(clamp(y_lines, 1, lines_on_screen()-1) - y_lines)
   self.t = os.clock()
+  local on_screen = numbers.start < self.position[1] and self.position[1] < numbers.start + lines_on_screen()
+  if not on_screen then
+    numbers.start = self.position[1]
+  end
 end
 
 function selection:draw()
-  local selection_color = map(back_color, function(x) return (x+0.5) end)
-  love.graphics.setColor(selection_color)
-  -- love.graphics.rectangle('fill', 100, 100, 150, 150)
+  if not self.active then return end
+  love.graphics.setColor(self.color)
+  local fheight = font:getHeight()
+  local fwidth = font:getWidth(' ')
+  local p1, p2 = self.beg_pos, cursor.position
+  if p2[3] < p1[3] then p1, p2 = p2, p1 end
+  local fheight = font:getHeight()
+  for line_i = p1[1], p2[1] do
+    local y1 = (line_i + 0 - numbers.start) * fheight
+    local y2 = (line_i + 1 - numbers.start) * fheight
+    local x1 = numbers.width
+    local x2 = love.graphics.getWidth()
+    if line_i == p1[1] then x1 = p1[2] * fwidth + numbers.width end
+    if line_i == p2[1] then x2 = p2[2] * fwidth + numbers.width end
+    love.graphics.rectangle('fill', x1, y1, x2-x1, y2-y1)
+  end
+end
+
+function selection:str()
+  local p1 = self.beg_pos[3]
+  local p2 = cursor.position[3]
+  if p1 < p2 then
+    return text.str:sub(p1, p2)
+  else
+    return text.str:sub(p2+1, p1)
+  end
+end
+
+function selection:set_beg()
+  self.beg_pos = map(cursor.position, id)
+end
+
+function selection:remove()
+  local p1, p2 = self.beg_pos[3], cursor.position[3]
+  p1, p2 = math.min(p1, p2), math.max(p1, p2)
+  text:remove(p1+1, p2)
+  if cursor.position[3] > self.beg_pos[3] then
+    cursor.position = map(self.beg_pos, id)
+  end
 end
 
 
@@ -266,16 +325,12 @@ function love.draw()
   cursor:draw()
 end
 
-function love.wheelmoved(x,y)
-  text:move(y)
-end
-
 function love.keypressed(key)
-  selection.active = false
-  selection.intervals = {}
   if key == 'lshift' then 
-    selection.active = true 
-    table.insert(selection.intervals, {})
+    if not selection.active then 
+      selection:set_beg()
+      selection.active = true 
+    end
   end
   if love.keyboard.isDown('lgui') then
     if key == '=' then 
@@ -285,7 +340,7 @@ function love.keypressed(key)
       font_size = font_size - 1
       update_font()
     elseif key == 's' then
-      write_file(actual_file or default_fpath, text.str)
+      write_file(file or default_fpath, text.str)
     elseif key == 'left' then 
       cursor.position[2] = 0
     elseif key == 'right' then
@@ -299,12 +354,21 @@ function love.keypressed(key)
     elseif key == 'v' then
       text:insert(love.system.getClipboardText())
     elseif key == 'c' then
-      -- love.system.setClipboardText(selection.str)
+      love.system.setClipboardText(selection:str())
+      selection.active = false
+    elseif key == 'x' then 
+      if selection.active then
+        love.system.setClipboardText(selection:str())
+        selection:remove()
+      end
+      selection.active = false
+    elseif key == 'v' then
+      text:insert(love.system.getClipboardText())
     elseif key == 'backspace' then
       text:remove(cursor.position[3]-cursor.position[2]+1, cursor.position[3])
       cursor.position[2] = 0
     elseif key == 'o' then
-      open_file(text:get_line(1))
+      open(text:get_line(cursor.position[1]))
     end
   elseif love.keyboard.isDown('lalt') then
     if key == 'left' then
@@ -330,12 +394,16 @@ function love.keypressed(key)
     elseif key == 'down' then
       cursor.position[1] = cursor.position[1] + 1
     elseif key == 'backspace' then
-      text:remove(cursor.position[3], cursor.position[3])
-      if cursor.position[2] == 0 then 
-        cursor.position[1] = cursor.position[1] - 1
-        cursor.position[2] = #text:get_line(cursor.position[1])
+      if selection.active then
+        selection:remove()
       else
-        cursor.position[2] = cursor.position[2] - 1
+        text:remove(cursor.position[3], cursor.position[3])
+        if cursor.position[2] == 0 then 
+          cursor.position[1] = cursor.position[1] - 1
+          cursor.position[2] = #text:get_line(cursor.position[1])
+        else
+          cursor.position[2] = cursor.position[2] - 1
+        end
       end
     elseif key == 'return' then
       local cur_str = text:get_line(cursor.position[1])
@@ -347,20 +415,23 @@ function love.keypressed(key)
     elseif key == 'tab' then
       text:insert('  ')
     elseif key == 'escape' then
-      open_file(default_fpath)
+      open('/')
     end
+    -- selection.active = love.keyboard.isDown('lshift')
   end
   cursor:update()
 end
 
 function love.textinput(t)
+  if selection.active then
+    selection:remove()
+    selection.active = false
+  end
   text:insert(t)
 end
 
-function love.keyreleased(key)
-  if key == 'lshift' then 
-    selection.active = false 
-  end
+function love.wheelmoved(x,y)
+  numbers.start = clamp(numbers.start + y, 1, text:count_lines())
 end
 
 function love.mousepressed(mx, my, button)
@@ -371,18 +442,36 @@ function love.mousepressed(mx, my, button)
     }
     cursor:update()
   end
+  selection:set_beg()
+  selection.active = true
+end
+
+function love.mousemoved(mx, my, dx, dy)
+  if love.mouse.isDown(1) then
+    cursor.position = {
+      numbers.start + math.floor(my / font:getHeight()),
+      math.floor((mx - numbers.width) / font:getWidth(' '))
+    }
+    cursor:update()
+  end
+end
+
+function love.wheelmoved(x,y)
+  numbers.start = clamp(numbers.start - y, 1, text:count_lines())
 end
 
 function love.filedropped(file)
   open_file(file:getFilename())
 end
 
+function love.directorydropped(path)
+  open_directory(path)
+end
+
 
 --[[
 
   TODO:
-1. selection
-2. file browser
 3. go to line (status bar)
 4. completion
 5. search 

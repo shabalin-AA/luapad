@@ -49,6 +49,7 @@ highlight.lua = {
   { to_hl = 'true',     rule = kw_rule, color = kw_color },
   { to_hl = 'false',    rule = kw_rule, color = kw_color },
   { to_hl = 'if',       rule = kw_rule, color = kw_color },
+  { to_hl = 'in',       rule = kw_rule, color = kw_color },
   { to_hl = 'then',     rule = kw_rule, color = kw_color },
   { to_hl = 'else',     rule = kw_rule, color = kw_color },
   { to_hl = 'elseif',   rule = kw_rule, color = kw_color },
