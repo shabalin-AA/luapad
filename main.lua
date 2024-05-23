@@ -37,9 +37,8 @@ function write_file(fname, str)
 end
 
 
-local directory = nil
+local directory = '/'
 local file = nil
-local default_fpath = '/tmp/text.txt'
 
 local text = {}
 text.str = ''
@@ -71,34 +70,49 @@ function lines_on_screen()
   return math.floor(love.graphics.getHeight() / font:getHeight())
 end
 
-function open_file(fname)
-  file = fname or default_fpath
-  directory = nil
+function execute(cmd)
+  local handle = io.popen(cmd)
+  local content = handle:read('*all')
+  return content
+end
+
+function open_file(path)
+  file = path
+  text.str = read_file(file)
   love.window.setTitle(file)
-  text.str = read_file(file) or ''
-  text.str = text.str
 end
 
 function open_directory(path)
-  directory = path or '/'
-  file = nil
+  local content = execute('ls -a '..path)
+  text.str = content
+  directory = path
   love.window.setTitle(directory)
-  local cmd = 'ls -a '..directory
-  local handle = io.popen(cmd)
-  text.str = ''
-  for line in handle:lines() do
-    text.str = text.str..line..'\n'
-  end
 end
 
 function open(path)
   cursor.position = {1,0,0}
   numbers.start = 1
-  local cmd = 'file '..path
-  local handle = io.popen(cmd)
-  local content = handle:read('*all')
+  if path == '..' then
+    local i,j = directory:sub(1, #directory-1):find('.*/')
+    if j == nil then return end
+    path = directory:sub(i,j-1)
+  elseif path == '.' then
+    return
+  else
+    path = directory..path
+  end
+  local content = ''
+  if path == '' then
+    content = execute('file /')
+  else
+    content = execute('file '..path)
+  end
+  if content:find('cannot') then 
+    text.str = content
+    return 
+  end
   if content:find('directory') then
-    open_directory((directory or '')..'/'..path)
+    open_directory(path..'/')
   elseif content:find('text') then
     open_file(path)
   end
@@ -298,7 +312,7 @@ end
 function love.load()
   love.graphics.setBackgroundColor(back_color)
   update_font()
-  open_file(default_fpath)
+  open_directory(directory)
   love.keyboard.setKeyRepeat(true)
 end
 
@@ -326,12 +340,6 @@ function love.draw()
 end
 
 function love.keypressed(key)
-  if key == 'lshift' then 
-    if not selection.active then 
-      selection:set_beg()
-      selection.active = true 
-    end
-  end
   if love.keyboard.isDown('lgui') then
     if key == '=' then 
       font_size = font_size + 1
@@ -415,14 +423,30 @@ function love.keypressed(key)
     elseif key == 'tab' then
       text:insert('  ')
     elseif key == 'escape' then
-      open('/')
+      file = nil
+      open_directory(directory)
+    elseif directory and key == 'o' then
+      open(text:get_line(cursor.position[1]))
     end
-    -- selection.active = love.keyboard.isDown('lshift')
+  end
+  if love.keyboard.isDown('lshift') then
+    if not selection.active then
+      selection.active = true
+      selection:set_beg()
+    end
   end
   cursor:update()
 end
 
+function love.keyreleased(key, isrepeat)
+  if not (love.keyboard.isDown('lshift') or key == 'lshift') then
+    selection.active = false
+    selection:set_beg()
+  end
+end
+
 function love.textinput(t)
+  if directory then return end
   if selection.active then
     selection:remove()
     selection.active = false
