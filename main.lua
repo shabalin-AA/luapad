@@ -204,8 +204,8 @@ local separators = '[%s%+%-=%*/:;%%,%.%(%)%[%]]'
 
 function text:find_word_end()
   local line = self:get_line(cursor.position[1])..' '
-  local i,j = line:find('.-'..separators, cursor.position[2]+1)
-  return j or #line
+  local i,j = line:find('..-'..separators, cursor.position[2]+1)
+  return (j or #line) - 1
 end
 
 function text:find_word_beg()
@@ -446,7 +446,7 @@ function love.keyreleased(key, isrepeat)
 end
 
 function love.textinput(t)
-  if directory then return end
+  if not file then return end
   if selection.active then
     selection:remove()
     selection.active = false
@@ -458,16 +458,25 @@ function love.wheelmoved(x,y)
   numbers.start = clamp(numbers.start + y, 1, text:count_lines())
 end
 
-function love.mousepressed(mx, my, button)
+function love.mousepressed(mx, my, button, istouch, presses)
   if mx > numbers.width then
     cursor.position = {
       numbers.start + math.floor(my / font:getHeight()),
-      math.floor((mx - numbers.width) / font:getWidth(' '))
+      math.floor((mx - numbers.width) / font:getWidth(' ')),
+      0
     }
     cursor:update()
   end
-  selection:set_beg()
   selection.active = true
+  selection:set_beg()
+  if presses == 2 then
+    selection.beg_pos[2] = text:find_word_beg()
+    cursor.position[2] = text:find_word_end()
+  elseif presses == 3 then
+    selection.beg_pos = {cursor.position[1], 0, cursor.position[3] - cursor.position[2]}
+    cursor.position[2] = #text:get_line(cursor.position[1])
+  end
+  cursor:update()
 end
 
 function love.mousemoved(mx, my, dx, dy)
