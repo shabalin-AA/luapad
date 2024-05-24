@@ -1,7 +1,9 @@
 local highlight = require 'highlight'
 
 
-function id(x) return x end
+function id(x) 
+  return x 
+end
 
 function last(t)
   return t[#t]
@@ -59,6 +61,10 @@ selection.color = {0.7, 0.7, 0.7}
 selection.active = false
 -- begin position that copies cursor position
 selection.beg_pos = {0,0,0}
+
+local completion = {}
+completion.words = {}
+completion.iter = 0
 
 
 function update_font()
@@ -308,6 +314,46 @@ function selection:remove()
   end
 end
 
+function completion:reset()
+  completion.words = {}
+  completion.iter = 0
+end
+
+function completion:contains(word)
+  for _,v in ipairs(self.words) do
+    if v == word then return true end
+  end
+  return false
+end
+
+function completion:append(word)
+  if not self:contains(word) then 
+    table.insert(self.words, word)
+  end
+end
+
+function completion:next()
+  self.iter = clamp(self.iter, 1, #self.words)
+  local res = self.words[self.iter]
+  self.iter = self.iter + 1
+  if self.iter > #self.words then self.iter = 1 end
+  return res
+end
+
+function completion:fill(word)
+  table.insert(self.words, word)
+  local str = text.str
+  local i,j = str:find(separators..word, 1)
+  i = i + 1
+  while j do
+    j = str:find(separators, i)
+    self:append(str:sub(i, j-1))
+    i,j = str:find(separators..word, j)
+    i = (i or 0) + 1
+  end
+  self.iter = 2
+end
+
 
 function love.load()
   love.graphics.setBackgroundColor(back_color)
@@ -391,6 +437,24 @@ function love.keypressed(key)
       local toremove = cursor.position[2] - text:find_word_beg()
       text:remove(cursor.position[3] - toremove, cursor.position[3])
       cursor.position[2] = cursor.position[2] - toremove
+    elseif key == 'return' then
+      local wb = text:find_word_beg()
+      local word = text:get_line(cursor.position[1]):sub(wb, text:find_word_end())
+      if not completion:contains(word) then
+        completion:reset()
+      end
+      if #completion.words == 0 then
+        completion:fill(word)
+        for i,v in ipairs(completion.words) do
+          print(i,v)
+        end
+      end
+      local toremove = cursor.position[2] - wb
+      text:remove(cursor.position[3] - toremove + 1, cursor.position[3])
+      cursor.position[2] = wb
+      cursor.position[3] = cursor.position[3] - toremove
+      text:insert(completion:next())
+      wb_prev = wb
     end
   else
     if key == 'left' then
@@ -414,6 +478,10 @@ function love.keypressed(key)
         end
       end
     elseif key == 'return' then
+      if not file then 
+        open(text:get_line(cursor.position[1]))
+        return 
+      end
       local cur_str = text:get_line(cursor.position[1])
       local i,j = cur_str:find('%s*')
       local indentation = cur_str:sub(i,j)
@@ -425,8 +493,6 @@ function love.keypressed(key)
     elseif key == 'escape' then
       file = nil
       open_directory(directory)
-    elseif directory and key == 'o' then
-      open(text:get_line(cursor.position[1]))
     end
   end
   if love.keyboard.isDown('lshift') then
