@@ -1,6 +1,6 @@
 local highlight = {}
 
-back_color = {29/255, 32/255, 33/255}
+back_color = {37/255, 35/255, 35/255}
 text_color = {249/255, 245/255, 215/255}
 kw_color = {251/255, 73/255, 52/255}
 str_color = {142/255, 192/255, 124/255}
@@ -10,12 +10,14 @@ fn_color = {69/255, 133/255, 136/255}
 attr_color = {215/255, 153/255, 33/255}
 number_color = {211/255, 134/255, 155/255}
 
+separators = '[%s%+%-=%*/:;%%,%.%(%)%[%]{}]'
+
 local function kw_rule(text,i,j)
-  return (i==1 or text:sub(i-1,i-1):find('%A')) and text:sub(j+1,j+1):find('%s')
+  return (i==1 or text:sub(i-1,i-1):find(separators)) and text:sub(j+1,j+1):find(separators)
 end
 
 local function self_rule(text,i,j)
-  return (i==1 or text:sub(i-1,i-1):find('%A')) and text:sub(j+1,j+1):find('[%s%.:]')
+  return (i==1 or text:sub(i-1,i-1):find(separators)) and text:sub(j+1,j+1):find('[%s%.:]')
 end
 
 local function pass(_,_,_) return true end
@@ -32,8 +34,8 @@ local function attr_rule(text,i,j)
 end
 
 local function number_rule(text,i,j)
-  return text:sub(i-1,i-1):find('[%s%+%-%*/%(%)%[%]{},%%]') and
-         text:sub(j+1,j+1):find('[%s%+%-%*/%(%)%[%]{},%%]')
+  return text:sub(i-1,i-1):find(separators) and
+         text:sub(j+1,j+1):find(separators)
 end
 
 highlight.lua = {

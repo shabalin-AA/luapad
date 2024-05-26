@@ -2,6 +2,10 @@ local cursor = {}
 cursor.position = {1,0,0} -- line, char in line, char in whole text
 cursor.t = os.clock() -- for blinking
 
+function cursor:reset()
+  self.position = {1,0,0}
+end
+
 function cursor:blink()
   local elapsed = (os.clock() - self.t) % 0.1
   return 0 < elapsed and elapsed < 0.05 

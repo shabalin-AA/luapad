@@ -1,9 +1,11 @@
-local text = require 'text'
+require 'text'
+local text = Text()
 local numbers = require 'numbers'
 local cursor = require 'cursor'
 local selection = require 'selection'
 local completion = require 'completion'
 local highlight = require 'highlight'
+local status_bar = require 'status_bar'
 
 
 function id(x) 
@@ -52,6 +54,7 @@ local font = nil
 
 
 function update_font()
+  font_size = clamp(font_size, 2, 60)
   font = love.graphics.newFont('Menlo.ttc', font_size)
   love.graphics.setFont(font)
 end
@@ -67,12 +70,14 @@ function execute(cmd)
 end
 
 function open_file(path)
+  cursor:reset()
   file = path
   text.str = read_file(file)
   love.window.setTitle(file)
 end
 
 function open_directory(path)
+  cursor:reset()
   local content = execute('ls -a '..path)
   text.str = content
   directory = path
@@ -80,7 +85,7 @@ function open_directory(path)
 end
 
 function open(path)
-  cursor.position = {1,0,0}
+  cursor:reset() 
   numbers.start = 1
   if path == '..' then
     local i,j = directory:sub(1, #directory-1):find('.*/')
@@ -114,6 +119,7 @@ function love.load()
   update_font()
   open_directory(directory)
   love.keyboard.setKeyRepeat(true)
+  text.mode = highlight.lua
 end
 
 function sleep(a)
@@ -131,10 +137,10 @@ end
 
 function love.draw()
   love.graphics.setColor(comment_color)
-  love.graphics.printf(numbers:str(text, font), 0,0, numbers.width, 'right')
+  love.graphics.printf(numbers:str(text, font), 0, 0, numbers.width, 'right')
   selection:draw(font, cursor, numbers)
   love.graphics.setColor({1,1,1})
-  love.graphics.print(text:highlight(highlight.lua, numbers.start), numbers.width, 0)
+  text:draw(numbers.width, 0, numbers.start)
   love.graphics.setColor(text_color)
   cursor:draw(numbers, font)
 end
@@ -142,13 +148,15 @@ end
 function love.keypressed(key)
   if love.keyboard.isDown('lgui') then
     if key == '=' then 
-      font_size = font_size + 1
+      font_size = font_size + 2
       update_font()
     elseif key == '-' then
-      font_size = font_size - 1
+      font_size = font_size - 2
       update_font()
     elseif key == 's' then
-      write_file(file or default_fpath, text.str)
+      if file then  
+        write_file(file, text.str)
+      end
     elseif key == 'left' then 
       cursor.position[2] = 0
     elseif key == 'right' then
@@ -160,27 +168,27 @@ function love.keypressed(key)
       cursor.position[1] = text:count_lines()
       cursor.position[2] = #text:get_line(cursor.position[1])
     elseif key == 'v' then
-      text:insert(love.system.getClipboardText(), cursor.position[3])
-      cursor.position[2] = cursor.position[2] + #t
-      cursor:update(text, numbers)
+      local ins = love.system.getClipboardText()
+      text:insert(ins, cursor.position[3])
+      cursor.position[2] = cursor.position[2] + #ins
     elseif key == 'c' then
       love.system.setClipboardText(selection:str(text.str, cursor.position[3]))
-      selection.active = false
     elseif key == 'x' then 
       if selection.active then
         love.system.setClipboardText(selection:str(text.str, cursor.position[3]))
         cursor.posiiton = selection:remove(text, cursor.position)
       end
-      selection.active = false
     elseif key == 'v' then
-      text:insert(love.system.getClipboardText(), cursor.position[3])
-      cursor.position[2] = cursor.position[2] + #t
-      cursor:update(text, numbers)
+      local ins = love.system.getClipboardText()  
+      text:insert(ins, cursor.position[3])
+      cursor.position[2] = cursor.position[2] + #ins
     elseif key == 'backspace' then
       text:remove(cursor.position[3] - cursor.position[2] + 1, cursor.position[3])
       cursor.position[2] = 0
     elseif key == 'o' then
       open(text:get_line(cursor.position[1]))
+    elseif key == 'l' then
+      status_bar.active = true
     end
   elseif love.keyboard.isDown('lalt') then
     if key == 'left' then
@@ -203,19 +211,16 @@ function love.keypressed(key)
       end
       if #completion.words == 0 then
         completion:fill(word, text.str)
-        -- for i,v in ipairs(completion.words) do
-        --   print(i,v)
-        -- end
       end
+      -- remove old word
       local toremove = cursor.position[2] - wb
       text:remove(cursor.position[3] - toremove + 1, cursor.position[3])
       cursor.position[2] = wb
       cursor.position[3] = cursor.position[3] - toremove
+      -- insert completion word
       local ins = completion:next()
       text:insert(ins, cursor.position[3])
       cursor.position[2] = cursor.position[2] + #ins
-      cursor:update(text, numbers)
-      wb_prev = wb
     end
   else
     if key == 'left' then
@@ -248,9 +253,11 @@ function love.keypressed(key)
       local indentation = '\n'..cur_str:sub(i,j)
       text:insert(indentation, cursor.position[3])
       cursor.position[1] = cursor.position[1] + 1
-      cursor.position[2] = #indentation
-    elseif key == 'tab' then
-      text:insert('  ', cursor.position[3])
+      cursor.position[2] = #indentation - 1   
+      elseif key == 'tab' then
+      local ins = '  '
+      text:insert(ins, cursor.position[3])
+      cursor.position[2] = cursor.position[2] + #ins
     elseif key == 'escape' then
       file = nil
       open_directory(directory)
@@ -274,8 +281,11 @@ end
 
 function love.textinput(t)
   if not file then return end
-  if selection.active then
-    cursor.posiiton = selection:remove(text, cursor.position)
+  if love.keyboard.isDown('lshift') then
+    selection.active = false
+  end
+  if selection.active and (selection.beg_pos[3] - cursor.position[3]) > 0 then
+    cursor.position = selection:remove(text, cursor.position)
     selection.active = false
   end
   text:insert(t, cursor.position[3])
@@ -330,13 +340,14 @@ function love.filedropped(file)
 end
 
 function love.directorydropped(path)
-  open_directory(path)
+  open_directory(path..'/')
 end
 
 
 --[[
 
   TODO:
+1. check and highlight unmatched parenthesis
 3. go to line (status bar)
 5. search 
 
