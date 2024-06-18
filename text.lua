@@ -1,4 +1,4 @@
-separators = '[%s%+%-=%*/:;%%,%.%(%)%[%]{}]'
+separators = '[%s%+%-=%*/:;%%,%.%(%)%[%]{}]\'\"'
 
 function Text()
   local new = {}
@@ -44,6 +44,9 @@ function Text()
       end
       if i > first_line + lines_on_screen() then break end
       i = i+1
+    end
+    if self.mode == nil then
+      return str
     end
     local indexes = {}
     for _,hl_entry in ipairs(self.mode) do

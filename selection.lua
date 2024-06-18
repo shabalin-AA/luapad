@@ -1,8 +1,8 @@
 local selection = {}
-selection.color = {0.7, 0.7, 0.7}
+selection.color = {0.5, 0.5, 0.5}
 selection.active = false
 -- begin position that copies cursor position
-selection.beg_pos = {0,0,0}
+selection.beg_pos = {}
 
 function selection:draw(font, cursor, numbers)
   if not self.active then return end
@@ -38,9 +38,9 @@ function selection:set_beg(cursor_position)
 end
 
 function selection:remove(text, cursor_position)
-  local p1, p2 = self.beg_pos[3] + 1, cursor_position[3]
+  local p1, p2 = self.beg_pos[3], cursor_position[3]
   p1, p2 = math.min(p1, p2), math.max(p1, p2)
-  text:remove(p1, p2)
+  text:remove(p1 + 1, p2)
   if self.beg_pos[3] < cursor_position[3] then
     return map(self.beg_pos, id)
   end

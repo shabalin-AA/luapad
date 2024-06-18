@@ -1,10 +1,10 @@
 require 'text'
 local text = Text()
-local numbers = require 'numbers'
-local cursor = require 'cursor'
-local selection = require 'selection'
+local numbers    = require 'numbers'
+local cursor     = require 'cursor'
+local selection  = require 'selection'
 local completion = require 'completion'
-local highlight = require 'highlight'
+local highlight  = require 'highlight'
 local status_bar = require 'status_bar'
 
 
@@ -26,7 +26,7 @@ end
 
 function clamp(v, minv, maxv)
   if     v < minv then return minv
-  elseif v > maxv then return maxv
+  elseif v > maxv then return maxv 
   else return v end
 end
 
@@ -51,16 +51,17 @@ local file = nil
 
 local font_size = 22
 local font = nil
+local tab_replacement = '    '
 
 
 function update_font()
   font_size = clamp(font_size, 2, 60)
-  font = love.graphics.newFont('Menlo.ttc', font_size)
+  font = love.graphics.newFont('Iosevka-Regular.ttc', font_size)
   love.graphics.setFont(font)
 end
 
 function lines_on_screen()
-  return math.floor(love.graphics.getHeight() / font:getHeight())
+  return math.floor(love.graphics.getHeight() / font:getHeight()) + 1
 end
 
 function execute(cmd)
@@ -72,8 +73,14 @@ end
 function open_file(path)
   cursor:reset()
   file = path
-  text.str = read_file(file)
+  text.str = read_file(file):gsub('\t', tab_replacement)..'\n'
   love.window.setTitle(file)
+  local i,j = file:find('.+%.')
+  local file_ext = nil
+  if j then 
+    file_ext = file:sub(j+1, -1)
+  end
+  text.mode = highlight[file_ext]
 end
 
 function open_directory(path)
@@ -119,7 +126,6 @@ function love.load()
   update_font()
   open_directory(directory)
   love.keyboard.setKeyRepeat(true)
-  text.mode = highlight.lua
 end
 
 function sleep(a)
@@ -155,7 +161,7 @@ function love.keypressed(key)
       update_font()
     elseif key == 's' then
       if file then  
-        write_file(file, text.str)
+        write_file(file, text.str:sub(1, -2))
       end
     elseif key == 'left' then 
       cursor.position[2] = 0
@@ -176,7 +182,7 @@ function love.keypressed(key)
     elseif key == 'x' then 
       if selection.active then
         love.system.setClipboardText(selection:str(text.str, cursor.position[3]))
-        cursor.posiiton = selection:remove(text, cursor.position)
+        cursor.position = selection:remove(text, cursor.position)
       end
     elseif key == 'v' then
       local ins = love.system.getClipboardText()  
@@ -235,13 +241,13 @@ function love.keypressed(key)
       if selection.active then
         cursor.position = selection:remove(text, cursor.position)
       else
-        text:remove(cursor.position[3], cursor.position[3])
         if cursor.position[2] == 0 then 
+          cursor.position[2] = #text:get_line(cursor.position[1] - 1)
           cursor.position[1] = cursor.position[1] - 1
-          cursor.position[2] = #text:get_line(cursor.position[1])
         else
           cursor.position[2] = cursor.position[2] - 1
         end
+        text:remove(cursor.position[3], cursor.position[3])
       end
     elseif key == 'return' then
       if not file then 
@@ -255,7 +261,7 @@ function love.keypressed(key)
       cursor.position[1] = cursor.position[1] + 1
       cursor.position[2] = #indentation - 1   
       elseif key == 'tab' then
-      local ins = '  '
+      local ins = tab_replacement
       text:insert(ins, cursor.position[3])
       cursor.position[2] = cursor.position[2] + #ins
     elseif key == 'escape' then
@@ -284,7 +290,7 @@ function love.textinput(t)
   if love.keyboard.isDown('lshift') then
     selection.active = false
   end
-  if selection.active and (selection.beg_pos[3] - cursor.position[3]) > 0 then
+  if selection.active and math.abs(selection.beg_pos[3] - cursor.position[3]) > 0 then
     cursor.position = selection:remove(text, cursor.position)
     selection.active = false
   end
