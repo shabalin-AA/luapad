@@ -11,12 +11,12 @@ function cursor:blink()
   return 0 < elapsed and elapsed < 0.05 
 end
 
-function cursor:draw(numbers, font)
+function cursor:draw(numbers, font, y_offset)
   if self:blink() then
     love.graphics.setLineWidth(1)
     local x = numbers.width + self.position[2] * font:getWidth(' ')
-    local y1 = (self.position[1] - numbers.start + 0)*font:getHeight()
-    local y2 = (self.position[1] - numbers.start + 1)*font:getHeight()
+    local y1 = (self.position[1] - numbers.start + 0)*font:getHeight() + y_offset
+    local y2 = (self.position[1] - numbers.start + 1)*font:getHeight() + y_offset
     love.graphics.line(x,y1,x,y2)
     self.t = 0
   end

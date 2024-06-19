@@ -5,7 +5,7 @@ local cursor     = require 'cursor'
 local selection  = require 'selection'
 local completion = require 'completion'
 local highlight  = require 'highlight'
-local status_bar = require 'status_bar'
+require 'tab'
 
 
 function id(x) 
@@ -46,8 +46,11 @@ function write_file(fname, str)
 end
 
 
-local directory = '/'
-local file = nil
+local tabs = {}
+table.insert(tabs, Tab('/', nil))
+tabs.active = last(tabs)
+tabs.font = love.graphics.newFont('Iosevka-Regular.ttc', 18)
+
 
 local font_size = 22
 local font = nil
@@ -72,13 +75,12 @@ end
 
 function open_file(path)
   cursor:reset()
-  file = path
-  text.str = read_file(file):gsub('\t', tab_replacement)..'\n'
-  love.window.setTitle(file)
-  local i,j = file:find('.+%.')
+  tabs.active.file = path
+  text.str = read_file(tabs.active.file):gsub('\t', tab_replacement)..'\n'
+  local i,j = tabs.active.file:find('.+%.')
   local file_ext = nil
   if j then 
-    file_ext = file:sub(j+1, -1)
+    file_ext = tabs.active.file:sub(j+1, -1)
   end
   text.mode = highlight[file_ext]
 end
@@ -87,11 +89,12 @@ function open_directory(path)
   cursor:reset()
   local content = execute('ls -a '..path)
   text.str = content
-  directory = path
-  love.window.setTitle(directory)
+  tabs.active.directory = path
+  text.mode = nil
 end
 
 function open(path)
+  local directory = tabs.active.directory
   cursor:reset() 
   numbers.start = 1
   if path == '..' then
@@ -115,7 +118,7 @@ function open(path)
   end
   if content:find('directory') then
     open_directory(path..'/')
-  elseif content:find('text') then
+  elseif content:find('text') or content:find('empty') then
     open_file(path)
   end
 end
@@ -124,8 +127,9 @@ end
 function love.load()
   love.graphics.setBackgroundColor(back_color)
   update_font()
-  open_directory(directory)
+  open_directory(tabs.active.directory)
   love.keyboard.setKeyRepeat(true)
+  quit = false
 end
 
 function sleep(a)
@@ -137,18 +141,43 @@ local sleep = 0
 function love.update(dt)
   love.timer.sleep(sleep)
   if love.timer.getFPS() > 80 then
-    sleep = sleep + 0.00001
+    sleep = sleep + 1e-5
   end
 end
 
 function love.draw()
+  tabs.width = love.graphics.getWidth() / #tabs
+  tabs.height = tabs.font:getHeight()
+  for i,v in ipairs(tabs) do
+    local x = (i-1)*tabs.width
+    local y = 0
+    love.graphics.setColor(back_color)
+    love.graphics.rectangle('fill', x, 0, tabs.width, tabs.height)
+    love.graphics.setColor(comment_color)
+    love.graphics.rectangle('line', x, 0, tabs.width, tabs.height)
+    if v == tabs.active then
+      love.graphics.setColor({1,1,1})
+    else
+      love.graphics.setColor(comment_color)
+    end
+    local title = v:title()
+    if text.dirty then title = title..'*' end
+    love.graphics.printf(title, tabs.font, x, y, tabs.width, 'center')
+  end
+  
+  love.graphics.setColor(back_color)
+  love.graphics.rectangle('fill', 0, tabs.height, love.graphics.getWidth(), love.graphics.getHeight())
+  
   love.graphics.setColor(comment_color)
-  love.graphics.printf(numbers:str(text, font), 0, 0, numbers.width, 'right')
-  selection:draw(font, cursor, numbers)
+  love.graphics.printf(numbers:str(text, font), 0, tabs.height, numbers.width, 'right')
+
+  selection:draw(font, cursor, numbers, tabs.height)
+  
   love.graphics.setColor({1,1,1})
-  text:draw(numbers.width, 0, numbers.start)
+  text:draw(numbers.width, tabs.height, numbers.start)
+  
   love.graphics.setColor(text_color)
-  cursor:draw(numbers, font)
+  cursor:draw(numbers, font, tabs.height)
 end
 
 function love.keypressed(key)
@@ -160,8 +189,9 @@ function love.keypressed(key)
       font_size = font_size - 2
       update_font()
     elseif key == 's' then
-      if file then  
-        write_file(file, text.str:sub(1, -2))
+      if tabs.active.file then  
+        write_file(tabs.active.file, text.str:sub(1, -2))
+        text.dirty = false
       end
     elseif key == 'left' then 
       cursor.position[2] = 0
@@ -193,8 +223,28 @@ function love.keypressed(key)
       cursor.position[2] = 0
     elseif key == 'o' then
       open(text:get_line(cursor.position[1]))
-    elseif key == 'l' then
-      status_bar.active = true
+    elseif key == 't' then
+      table.insert(tabs, Tab(tabs.active.directory, nil))
+      tabs.active = last(tabs)
+      cursor:reset()
+      numbers.start = 1
+      open_directory(tabs.active.directory)
+    elseif key == 'w' then
+      love.event.clear()
+      local active_tab_i = 0
+      for i,v in ipairs(tabs) do
+        if v == tabs.active then
+          active_tab_i = i
+          break
+        end
+      end
+      table.remove(tabs, active_tab_i)
+      if #tabs == 0 then
+        love.event.push('quit', 0)
+      end
+      active_tab_i = active_tab_i - 1
+      active_tab_i = 1 + (active_tab_i-1) % #tabs
+      tabs.active = tabs[active_tab_i]
     end
   elseif love.keyboard.isDown('lalt') then
     if key == 'left' then
@@ -228,6 +278,24 @@ function love.keypressed(key)
       text:insert(ins, cursor.position[3])
       cursor.position[2] = cursor.position[2] + #ins
     end
+  elseif love.keyboard.isDown('lctrl') then
+    if key == 'tab' then
+      local active_tab_i = 0
+      for i,v in ipairs(tabs) do
+        if v == tabs.active then 
+          active_tab_i = i
+          break
+        end
+      end
+      active_tab_i = active_tab_i + 1
+      active_tab_i = 1 + (active_tab_i-1) % #tabs
+      tabs.active = tabs[active_tab_i]
+      if tabs.active.file then
+        open_file(tabs.active.file)
+      else
+        open_directory(tabs.active.directory)
+      end
+    end
   else
     if key == 'left' then
       cursor.position[2] = cursor.position[2] - 1
@@ -250,7 +318,7 @@ function love.keypressed(key)
         text:remove(cursor.position[3], cursor.position[3])
       end
     elseif key == 'return' then
-      if not file then 
+      if not tabs.active.file then 
         open(text:get_line(cursor.position[1]))
         return 
       end
@@ -260,13 +328,13 @@ function love.keypressed(key)
       text:insert(indentation, cursor.position[3])
       cursor.position[1] = cursor.position[1] + 1
       cursor.position[2] = #indentation - 1   
-      elseif key == 'tab' then
+    elseif key == 'tab' then
       local ins = tab_replacement
       text:insert(ins, cursor.position[3])
       cursor.position[2] = cursor.position[2] + #ins
     elseif key == 'escape' then
-      file = nil
-      open_directory(directory)
+      tabs.active.file = nil
+      open_directory(tabs.active.directory)
     end
   end
   if love.keyboard.isDown('lshift') then
@@ -286,7 +354,7 @@ function love.keyreleased(key, isrepeat)
 end
 
 function love.textinput(t)
-  if not file then return end
+  if not tabs.active.file then return end
   if love.keyboard.isDown('lshift') then
     selection.active = false
   end
@@ -306,7 +374,7 @@ end
 function love.mousepressed(mx, my, button, istouch, presses)
   if mx > numbers.width then
     cursor.position = {
-      numbers.start + math.floor(my / font:getHeight()),
+      numbers.start + math.floor((my - tabs.height) / font:getHeight()),
       math.floor((mx - numbers.width) / font:getWidth(' ')),
       0
     }
@@ -330,7 +398,7 @@ end
 function love.mousemoved(mx, my, dx, dy)
   if love.mouse.isDown(1) then
     cursor.position = {
-      numbers.start + math.floor(my / font:getHeight()),
+      numbers.start + math.floor((my - tabs.height) / font:getHeight()),
       math.floor((mx - numbers.width) / font:getWidth(' '))
     }
     cursor:update(text, numbers)
@@ -347,6 +415,10 @@ end
 
 function love.directorydropped(path)
   open_directory(path..'/')
+end
+
+function love.quit()
+  return quit
 end
 
 

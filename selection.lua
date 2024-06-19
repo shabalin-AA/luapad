@@ -4,7 +4,7 @@ selection.active = false
 -- begin position that copies cursor position
 selection.beg_pos = {}
 
-function selection:draw(font, cursor, numbers)
+function selection:draw(font, cursor, numbers, y_offset)
   if not self.active then return end
   love.graphics.setColor(self.color)
   local fheight = font:getHeight()
@@ -13,8 +13,8 @@ function selection:draw(font, cursor, numbers)
   if p2[3] < p1[3] then p1, p2 = p2, p1 end
   local fheight = font:getHeight()
   for line_i = p1[1], p2[1] do
-    local y1 = (line_i + 0 - numbers.start) * fheight
-    local y2 = (line_i + 1 - numbers.start) * fheight
+    local y1 = (line_i + 0 - numbers.start) * fheight + y_offset
+    local y2 = (line_i + 1 - numbers.start) * fheight + y_offset
     local x1 = numbers.width
     local x2 = love.graphics.getWidth()
     if line_i == p1[1] then x1 = p1[2] * fwidth + numbers.width end

@@ -3,6 +3,7 @@ separators = '[%s%+%-=%*/:;%%,%.%(%)%[%]{}]\'\"'
 function Text()
   local new = {}
   new.str = ''
+  new.dirty = false
   
   function new:get_line(n)
     local line_beg = 0
@@ -25,6 +26,7 @@ function Text()
     local before = self.str:sub(1, pos)
     local after  = self.str:sub(pos + 1, -1)
     self.str = before..t..after
+    self.dirty = true
   end
 
   function new:remove(pos1, pos2)
@@ -33,6 +35,7 @@ function Text()
     local before = self.str:sub(1, pos1)
     local after = self.str:sub(pos2, -1)
     self.str = before..after
+    self.dirty = true
   end
 
   function new:highlight(first_line)
