@@ -10,7 +10,7 @@ fn_color = {69/255, 133/255, 136/255}
 attr_color = {215/255, 153/255, 33/255}
 number_color = {211/255, 134/255, 155/255}
 
-separators = '[%s%+%-=%*/:;%%,%.%(%)%[%]{}\'\"]'
+--local separators = '[#%s%+%-=%*/:;%%,%.%(%)%[%]{}\'\"]'
 
 local function kw_rule(text,i,j)
   return (i==1 or text:sub(i-1,i-1):find(separators)) and text:sub(j+1,j+1):find(separators)

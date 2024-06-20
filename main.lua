@@ -1,7 +1,8 @@
+separators = '[#%s%+%-=%*/:;%%,%.%(%)%[%]{}\'\"]'
+
 require 'text'
-local text = Text()
-local numbers    = require 'numbers'
-local cursor     = require 'cursor'
+local numbers = require 'numbers'
+require 'cursor'
 local selection  = require 'selection'
 local completion = require 'completion'
 local highlight  = require 'highlight'
@@ -45,21 +46,46 @@ function write_file(fname, str)
   file:close()
 end
 
+function execute(cmd)
+  local handle = io.popen(cmd)
+  local content = handle:read('*all')
+  return content
+end
+
+function current_user()
+  return execute('whoami'):sub(1, -2)
+end
+
 
 local tabs = {}
-table.insert(tabs, Tab('/', nil))
-tabs.active = last(tabs)
 tabs.font = love.graphics.newFont('Iosevka-Regular.ttc', 18)
+local text = nil
+local cursor = nil
+local file = nil
+local directory = nil
 
+function change_tab(i)
+  i = clamp(i, 1, #tabs)
+  tabs.active = tabs[i]
+  text = tabs.active.text
+  cursor = tabs.active.cursor
+  file = tabs.active.file
+  directory = tabs.active.directory
+  text:update(numbers.start, true)
+end
 
-local font_size = 22
-local font = nil
-local tab_replacement = '    '
-
+function new_tab(directory)
+  local tab = Tab(directory, nil)
+  tab.text = Text()
+  tab.cursor = Cursor()
+  table.insert(tabs, tab)
+  change_tab(#tabs)
+  open_directory(directory)
+end
 
 function update_font()
   font_size = clamp(font_size, 2, 60)
-  font = love.graphics.newFont('Iosevka-Regular.ttc', font_size)
+  font = love.graphics.newFont(font_file, font_size)
   love.graphics.setFont(font)
 end
 
@@ -67,35 +93,32 @@ function lines_on_screen()
   return math.floor(love.graphics.getHeight() / font:getHeight()) + 1
 end
 
-function execute(cmd)
-  local handle = io.popen(cmd)
-  local content = handle:read('*all')
-  return content
-end
-
 function open_file(path)
-  cursor:reset()
   tabs.active.file = path
-  text.str = read_file(tabs.active.file):gsub('\t', tab_replacement)..'\n'
-  local i,j = tabs.active.file:find('.+%.')
+  file = path
+  text.str = read_file(path):gsub('\t', tab_replacement)..'\n'
+  local i,j = path:find('.+%.')
   local file_ext = nil
   if j then 
-    file_ext = tabs.active.file:sub(j+1, -1)
+    file_ext = path:sub(j+1, -1)
   end
   text.mode = highlight[file_ext]
+  love.window.setTitle(path)
+  text:update(numbers.start, true)
 end
 
 function open_directory(path)
-  cursor:reset()
   local content = execute('ls -a '..path)
   text.str = content
   tabs.active.directory = path
+  directory = path
   text.mode = nil
+  love.window.setTitle(path)
+  text:update(numbers.start, true)
 end
 
 function open(path)
-  local directory = tabs.active.directory
-  cursor:reset() 
+  cursor:reset()
   numbers.start = 1
   if path == '..' then
     local i,j = directory:sub(1, #directory-1):find('.*/')
@@ -113,10 +136,9 @@ function open(path)
     content = execute('file '..path)
   end
   if content:find('cannot') then 
-    text.str = content
+    print('ERROR: '..content)
     return 
-  end
-  if content:find('directory') then
+  elseif content:find('directory') then
     open_directory(path..'/')
   elseif content:find('text') or content:find('empty') then
     open_file(path)
@@ -124,12 +146,24 @@ function open(path)
 end
 
 
+function load_config()
+  local home = '/Users/'..current_user()..'/'
+  local config_file_path = '.luapad.conf.lua'
+  local config_content = read_file(home..config_file_path)
+  write_file(love.filesystem.getAppdataDirectory()..'/'..'config.lua', config_content)
+  require('config')
+  -- config variables
+  tab_replacement = tab_replacement or '    '
+  font_size = font_size or 16
+  font_file = font_file or 'Menlo.ttc'
+end
+
 function love.load()
   love.graphics.setBackgroundColor(back_color)
-  update_font()
-  open_directory(tabs.active.directory)
   love.keyboard.setKeyRepeat(true)
-  quit = false
+  load_config()
+  update_font()
+  new_tab('/Users/'..current_user()..'/')
 end
 
 function sleep(a)
@@ -143,6 +177,20 @@ function love.update(dt)
   if love.timer.getFPS() > 80 then
     sleep = sleep + 1e-5
   end
+  text:update(numbers.start)
+end
+
+function update_cursor()
+  cursor:update(text)
+  local offscreen = 0
+  local lower_bound = numbers.start
+  local upper_bound = numbers.start + lines_on_screen() - 3
+  if cursor.position[1] >= upper_bound then
+    offscreen = cursor.position[1] - upper_bound
+  elseif cursor.position[1] <= lower_bound then
+    offscreen = cursor.position[1] - lower_bound
+  end
+  numbers.start = numbers.start + offscreen
 end
 
 function love.draw()
@@ -161,7 +209,6 @@ function love.draw()
       love.graphics.setColor(comment_color)
     end
     local title = v:title()
-    if text.dirty then title = title..'*' end
     love.graphics.printf(title, tabs.font, x, y, tabs.width, 'center')
   end
   
@@ -224,11 +271,7 @@ function love.keypressed(key)
     elseif key == 'o' then
       open(text:get_line(cursor.position[1]))
     elseif key == 't' then
-      table.insert(tabs, Tab(tabs.active.directory, nil))
-      tabs.active = last(tabs)
-      cursor:reset()
-      numbers.start = 1
-      open_directory(tabs.active.directory)
+      new_tab(directory)
     elseif key == 'w' then
       love.event.clear()
       local active_tab_i = 0
@@ -245,6 +288,54 @@ function love.keypressed(key)
       active_tab_i = active_tab_i - 1
       active_tab_i = 1 + (active_tab_i-1) % #tabs
       tabs.active = tabs[active_tab_i]
+      cursor:reset()
+      numbers.start = 1
+      if tabs.active.file then 
+        open_file(tabs.active.file)
+      else
+        open_directory(tabs.active.directory)
+      end
+    elseif key == 'd' then
+      local str_content = text:get_line(cursor.position[1])
+      text:insert('\n'..str_content, cursor.position[3])
+      cursor.position[1] = cursor.position[1] + 1
+    elseif key == ']' then
+      if selection.active then
+        local l1, l2 = math.min(selection.beg_pos[1], cursor.position[1]), math.max(selection.beg_pos[1], cursor.position[1])
+        cursor.position[1] = l1
+        cursor.position[2] = 0
+        update_cursor()
+        local l_beg_pos = cursor.position[3]
+        for i=l1, l2 do
+          text:insert(tab_replacement, l_beg_pos)
+          l_beg_pos = l_beg_pos + #text:get_line(i) + 1
+        end
+      else
+        text:insert(tab_replacement, cursor.position[3] - cursor.position[2])
+      end
+    elseif key == '[' then
+      if selection.active then
+        local l1, l2 = math.min(selection.beg_pos[1], cursor.position[1]), math.max(selection.beg_pos[1], cursor.position[1])
+        cursor.position[1] = l1
+        cursor.position[2] = 0
+        update_cursor()
+        local l_beg_pos = cursor.position[3]
+        for i=l1, l2 do
+          local line = text:get_line(i)
+          local j,k = line:find(tab_replacement)
+          if j == 1 then
+            text:remove(l_beg_pos + j, l_beg_pos + k)
+          end
+          l_beg_pos = l_beg_pos + #text:get_line(i) + 1
+        end
+      else
+        local line = text:get_line(cursor.position[1])
+        local j,k = line:find(tab_replacement)
+        if j == 1 then
+          local line_beg = cursor.position[3] - cursor.position[2]
+          text:remove(line_beg + j, line_beg + k)
+        end
+      end
     end
   elseif love.keyboard.isDown('lalt') then
     if key == 'left' then
@@ -289,12 +380,7 @@ function love.keypressed(key)
       end
       active_tab_i = active_tab_i + 1
       active_tab_i = 1 + (active_tab_i-1) % #tabs
-      tabs.active = tabs[active_tab_i]
-      if tabs.active.file then
-        open_file(tabs.active.file)
-      else
-        open_directory(tabs.active.directory)
-      end
+      change_tab(active_tab_i)
     end
   else
     if key == 'left' then
@@ -306,8 +392,11 @@ function love.keypressed(key)
     elseif key == 'down' then
       cursor.position[1] = cursor.position[1] + 1
     elseif key == 'backspace' then
+      local line = text:get_line(cursor.position[1])
       if selection.active then
         cursor.position = selection:remove(text, cursor.position)
+      elseif line:sub(cursor.position[2] - #tab_replacement, cursor.position[2]) == tab_replacement then
+        text:remove(cursor.position[3] - #tab_replacement + 1, cursor.position[3])
       else
         if cursor.position[2] == 0 then 
           cursor.position[2] = #text:get_line(cursor.position[1] - 1)
@@ -343,7 +432,7 @@ function love.keypressed(key)
       selection:set_beg(cursor.position)
     end
   end
-  cursor:update(text, numbers)
+  update_cursor()
 end
 
 function love.keyreleased(key, isrepeat)
@@ -364,7 +453,7 @@ function love.textinput(t)
   end
   text:insert(t, cursor.position[3])
   cursor.position[2] = cursor.position[2] + #t
-  cursor:update(text, numbers)
+  update_cursor()
 end
 
 function love.wheelmoved(x,y)
@@ -378,21 +467,21 @@ function love.mousepressed(mx, my, button, istouch, presses)
       math.floor((mx - numbers.width) / font:getWidth(' ')),
       0
     }
-    cursor:update(text, numbers)
+    update_cursor()
   end
   selection.active = true
   if presses == 1 then
     selection:set_beg(cursor.position)
   elseif presses == 2 then
     cursor.position[2] = text:find_word_beg(cursor)
-    cursor:update(text, numbers)
+    update_cursor()
     selection:set_beg(cursor.position)
     cursor.position[2] = text:find_word_end(cursor)
   elseif presses == 3 then
     selection.beg_pos = {cursor.position[1], 0, cursor.position[3] - cursor.position[2]}
     cursor.position[2] = #text:get_line(cursor.position[1])
   end
-  cursor:update(text, numbers)
+  update_cursor()
 end
 
 function love.mousemoved(mx, my, dx, dy)
@@ -401,7 +490,7 @@ function love.mousemoved(mx, my, dx, dy)
       numbers.start + math.floor((my - tabs.height) / font:getHeight()),
       math.floor((mx - numbers.width) / font:getWidth(' '))
     }
-    cursor:update(text, numbers)
+    update_cursor()
   end
 end
 
@@ -417,16 +506,13 @@ function love.directorydropped(path)
   open_directory(path..'/')
 end
 
-function love.quit()
-  return quit
-end
-
 
 --[[
 
   TODO:
 1. check and highlight unmatched parenthesis
 3. go to line (status bar)
-5. search 
+4. distinct text and cursor for each tab
+5. search in text
 
 ]]

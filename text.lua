@@ -1,5 +1,3 @@
-separators = '[%s%+%-=%*/:;%%,%.%(%)%[%]{}]\'\"'
-
 function Text()
   local new = {}
   new.str = ''
@@ -27,6 +25,7 @@ function Text()
     local after  = self.str:sub(pos + 1, -1)
     self.str = before..t..after
     self.dirty = true
+    self:update(prev_first_line, true)
   end
 
   function new:remove(pos1, pos2)
@@ -36,6 +35,7 @@ function Text()
     local after = self.str:sub(pos2, -1)
     self.str = before..after
     self.dirty = true
+    self:update(prev_first_line, true)
   end
 
   function new:highlight(first_line)
@@ -90,8 +90,18 @@ function Text()
     return res
   end
   
-  function new:draw(x,y, first_line)
-    love.graphics.print(self:highlight(first_line), x, y)
+  prev_first_line = 0
+  highlighted = {}
+  
+  function new:update(first_line, must_be_updated)
+    if must_be_updated or first_line ~= prev_first_line then
+      highlighted = self:highlight(first_line)
+    end
+    prev_first_line = first_line
+  end
+  
+  function new:draw(x,y)
+    love.graphics.print(highlighted, x, y)
   end
 
   function new:find_word_end(cursor)
@@ -108,5 +118,3 @@ function Text()
 
   return new
 end
-
-return Text()
