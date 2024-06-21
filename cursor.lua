@@ -21,12 +21,6 @@ function Cursor()
       love.graphics.line(x,y1,x,y2)
       self.t = 0
     end
-    local position_text = table.concat(self.position, ':')
-    love.graphics.print(
-      position_text, 
-      love.graphics.getWidth()-font:getWidth(position_text), 
-      love.graphics.getHeight()-font:getHeight()
-    )
   end
   
   function cursor:update(text)

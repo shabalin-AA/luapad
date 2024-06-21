@@ -25,7 +25,7 @@ function Text()
     local after  = self.str:sub(pos + 1, -1)
     self.str = before..t..after
     self.dirty = true
-    self:update(prev_first_line, true)
+    self:update(prev_first_line)
   end
 
   function new:remove(pos1, pos2)
@@ -35,7 +35,7 @@ function Text()
     local after = self.str:sub(pos2, -1)
     self.str = before..after
     self.dirty = true
-    self:update(prev_first_line, true)
+    self:update(prev_first_line)
   end
 
   function new:highlight(first_line)
@@ -93,8 +93,8 @@ function Text()
   prev_first_line = 0
   highlighted = {}
   
-  function new:update(first_line, must_be_updated)
-    if must_be_updated or first_line ~= prev_first_line then
+  function new:update(first_line, optional)
+    if (not optional) or first_line ~= prev_first_line then
       highlighted = self:highlight(first_line)
     end
     prev_first_line = first_line
@@ -106,12 +106,12 @@ function Text()
 
   function new:find_word_end(cursor)
     local line = self:get_line(cursor.position[1])..' '
-    local i,j = line:find('.-'..separators, cursor.position[2] + 2)
+    local i,j = line:find('.-'..separators, cursor.position[2] + 1)
     return (j or #line) - 1
   end
 
   function new:find_word_beg(cursor)
-    local line = self:get_line(cursor.position[1]):sub(1, cursor.position[2] - 1)
+    local line = self:get_line(cursor.position[1]):sub(1, cursor.position[2])
     local i,j = line:find('.*'..separators)
     return (j or 0)
   end

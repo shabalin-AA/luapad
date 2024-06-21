@@ -1,14 +1,15 @@
+--------------------------------------------------------------------------------------------------- globals
 separators = '[#%s%+%-=%*/:;%%,%.%(%)%[%]{}\'\"]'
 
-require 'text'
-local numbers = require 'numbers'
-require 'cursor'
-local selection  = require 'selection'
-local completion = require 'completion'
-local highlight  = require 'highlight'
+function lines_on_screen()
+  return math.floor(love.graphics.getHeight() / font:getHeight()) + 1
+end
+
 require 'tab'
+local highlight = require 'highlight'
 
 
+--------------------------------------------------------------------------------------------------- utils
 function id(x) 
   return x 
 end
@@ -57,12 +58,16 @@ function current_user()
 end
 
 
+--------------------------------------------------------------------------------------------------- tabs
 local tabs = {}
 tabs.font = love.graphics.newFont('Iosevka-Regular.ttc', 18)
 local text = nil
 local cursor = nil
 local file = nil
 local directory = nil
+local numbers = nil
+local selection = nil
+local completion = nil
 
 function change_tab(i)
   i = clamp(i, 1, #tabs)
@@ -71,13 +76,14 @@ function change_tab(i)
   cursor = tabs.active.cursor
   file = tabs.active.file
   directory = tabs.active.directory
-  text:update(numbers.start, true)
+  numbers = tabs.active.numbers
+  selection = tabs.active.selection
+  completion = tabs.active.completion
+  text:update(numbers.start)
 end
 
 function new_tab(directory)
   local tab = Tab(directory, nil)
-  tab.text = Text()
-  tab.cursor = Cursor()
   table.insert(tabs, tab)
   change_tab(#tabs)
   open_directory(directory)
@@ -89,10 +95,7 @@ function update_font()
   love.graphics.setFont(font)
 end
 
-function lines_on_screen()
-  return math.floor(love.graphics.getHeight() / font:getHeight()) + 1
-end
-
+--------------------------------------------------------------------------------------------------- opens
 function open_file(path)
   tabs.active.file = path
   file = path
@@ -104,7 +107,7 @@ function open_file(path)
   end
   text.mode = highlight[file_ext]
   love.window.setTitle(path)
-  text:update(numbers.start, true)
+  text:update(numbers.start)
 end
 
 function open_directory(path)
@@ -114,7 +117,7 @@ function open_directory(path)
   directory = path
   text.mode = nil
   love.window.setTitle(path)
-  text:update(numbers.start, true)
+  text:update(numbers.start)
 end
 
 function open(path)
@@ -146,6 +149,7 @@ function open(path)
 end
 
 
+--------------------------------------------------------------------------------------------------- load
 function load_config()
   local home = '/Users/'..current_user()..'/'
   local config_file_path = '.luapad.conf.lua'
@@ -166,6 +170,7 @@ function love.load()
   new_tab('/Users/'..current_user()..'/')
 end
 
+--------------------------------------------------------------------------------------------------- update
 function sleep(a)
   local sec = tonumber(os.clock() + a)
   while os.clock() < sec do end
@@ -177,7 +182,7 @@ function love.update(dt)
   if love.timer.getFPS() > 80 then
     sleep = sleep + 1e-5
   end
-  text:update(numbers.start)
+  text:update(numbers.start, true)
 end
 
 function update_cursor()
@@ -193,6 +198,7 @@ function update_cursor()
   numbers.start = numbers.start + offscreen
 end
 
+--------------------------------------------------------------------------------------------------- draw
 function love.draw()
   tabs.width = love.graphics.getWidth() / #tabs
   tabs.height = tabs.font:getHeight()
@@ -211,23 +217,11 @@ function love.draw()
     local title = v:title()
     love.graphics.printf(title, tabs.font, x, y, tabs.width, 'center')
   end
-  
-  love.graphics.setColor(back_color)
-  love.graphics.rectangle('fill', 0, tabs.height, love.graphics.getWidth(), love.graphics.getHeight())
-  
-  love.graphics.setColor(comment_color)
-  love.graphics.printf(numbers:str(text, font), 0, tabs.height, numbers.width, 'right')
-
-  selection:draw(font, cursor, numbers, tabs.height)
-  
-  love.graphics.setColor({1,1,1})
-  text:draw(numbers.width, tabs.height, numbers.start)
-  
-  love.graphics.setColor(text_color)
-  cursor:draw(numbers, font, tabs.height)
+  tabs.active:draw(0, tabs.height)
 end
 
 function love.keypressed(key)
+--------------------------------------------------------------------------------------------------- gui
   if love.keyboard.isDown('lgui') then
     if key == '=' then 
       font_size = font_size + 2
@@ -301,7 +295,8 @@ function love.keypressed(key)
       cursor.position[1] = cursor.position[1] + 1
     elseif key == ']' then
       if selection.active then
-        local l1, l2 = math.min(selection.beg_pos[1], cursor.position[1]), math.max(selection.beg_pos[1], cursor.position[1])
+        local l1 = math.min(selection.beg_pos[1], cursor.position[1])
+        local l2 = math.max(selection.beg_pos[1], cursor.position[1])
         cursor.position[1] = l1
         cursor.position[2] = 0
         update_cursor()
@@ -315,7 +310,8 @@ function love.keypressed(key)
       end
     elseif key == '[' then
       if selection.active then
-        local l1, l2 = math.min(selection.beg_pos[1], cursor.position[1]), math.max(selection.beg_pos[1], cursor.position[1])
+        local l1 = math.min(selection.beg_pos[1], cursor.position[1])
+        local l2 = math.max(selection.beg_pos[1], cursor.position[1])
         cursor.position[1] = l1
         cursor.position[2] = 0
         update_cursor()
@@ -337,10 +333,13 @@ function love.keypressed(key)
         end
       end
     end
+--------------------------------------------------------------------------------------------------- alt
   elseif love.keyboard.isDown('lalt') then
     if key == 'left' then
+      cursor.position[2] = clamp(cursor.position[2] - 1, 0, #text:get_line(cursor.position[1]))
       cursor.position[2] = text:find_word_beg(cursor)
     elseif key == 'right' then
+      cursor.position[2] = clamp(cursor.position[2] + 1, 0, #text:get_line(cursor.position[1]))
       cursor.position[2] = text:find_word_end(cursor)
     elseif key == 'up' then
       cursor.position[1] = cursor.position[1] - lines_on_screen()
@@ -352,7 +351,8 @@ function love.keypressed(key)
       cursor.position[2] = cursor.position[2] - toremove
     elseif key == 'return' then
       local wb = text:find_word_beg(cursor)
-      local word = text:get_line(cursor.position[1]):sub(wb + 1, text:find_word_end(cursor))
+      local we = text:find_word_end(cursor)
+      local word = text:get_line(cursor.position[1]):sub(wb + 1, we)
       if not completion:contains(word) then
         completion:reset()
       end
@@ -369,6 +369,7 @@ function love.keypressed(key)
       text:insert(ins, cursor.position[3])
       cursor.position[2] = cursor.position[2] + #ins
     end
+--------------------------------------------------------------------------------------------------- ctrl
   elseif love.keyboard.isDown('lctrl') then
     if key == 'tab' then
       local active_tab_i = 0
@@ -382,6 +383,7 @@ function love.keypressed(key)
       active_tab_i = 1 + (active_tab_i-1) % #tabs
       change_tab(active_tab_i)
     end
+--------------------------------------------------------------------------------------------------- just key
   else
     if key == 'left' then
       cursor.position[2] = cursor.position[2] - 1
@@ -432,9 +434,11 @@ function love.keypressed(key)
       selection:set_beg(cursor.position)
     end
   end
+  text:update(numbers.start)
   update_cursor()
 end
 
+--------------------------------------------------------------------------------------------------- key input
 function love.keyreleased(key, isrepeat)
   if not (love.keyboard.isDown('lshift') or key == 'lshift') then
     selection.active = false
@@ -456,6 +460,7 @@ function love.textinput(t)
   update_cursor()
 end
 
+--------------------------------------------------------------------------------------------------- mouse
 function love.wheelmoved(x,y)
   numbers.start = clamp(numbers.start + y, 1, text:count_lines())
 end
@@ -498,6 +503,7 @@ function love.wheelmoved(x,y)
   numbers.start = clamp(numbers.start - y, 1, text:count_lines())
 end
 
+--------------------------------------------------------------------------------------------------- file drop
 function love.filedropped(file)
   open_file(file:getFilename())
 end
@@ -512,7 +518,7 @@ end
   TODO:
 1. check and highlight unmatched parenthesis
 3. go to line (status bar)
-4. distinct text and cursor for each tab
+4. line wrapping
 5. search in text
 
 ]]
