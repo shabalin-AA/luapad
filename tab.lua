@@ -3,6 +3,7 @@ require 'cursor'
 require 'numbers'
 require 'selection'
 require 'completion'
+require 'search'
 
 function Tab(directory, file)
   local tab = {}
@@ -13,6 +14,7 @@ function Tab(directory, file)
   tab.numbers = Numbers()
   tab.selection = Selection()
   tab.completion = Completion()
+  tab.search = Search()
   
   function tab:title()
     local res = self.file or self.directory

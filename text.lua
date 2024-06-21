@@ -104,16 +104,16 @@ function Text()
     love.graphics.print(highlighted, x, y)
   end
 
-  function new:find_word_end(cursor)
-    local line = self:get_line(cursor.position[1])..' '
-    local i,j = line:find('.-'..separators, cursor.position[2] + 1)
+  function new:find_word_end(cursor_pos)
+    local line = self:get_line(cursor_pos[1])..' '
+    local i,j = line:find('.-'..separators, cursor_pos[2] + 1)
     return (j or #line) - 1
   end
 
-  function new:find_word_beg(cursor)
-    local line = self:get_line(cursor.position[1]):sub(1, cursor.position[2])
+  function new:find_word_beg(cursor_pos)
+    local line = self:get_line(cursor_pos[1]):sub(1, cursor_pos[2])
     local i,j = line:find('.*'..separators)
-    return (j or 0)
+    return (j or 1) - 1
   end
 
   return new

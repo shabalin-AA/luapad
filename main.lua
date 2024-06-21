@@ -1,3 +1,4 @@
+
 --------------------------------------------------------------------------------------------------- globals
 separators = '[#%s%+%-=%*/:;%%,%.%(%)%[%]{}\'\"]'
 
@@ -7,7 +8,6 @@ end
 
 require 'tab'
 local highlight = require 'highlight'
-
 
 --------------------------------------------------------------------------------------------------- utils
 function id(x) 
@@ -68,6 +68,7 @@ local directory = nil
 local numbers = nil
 local selection = nil
 local completion = nil
+local search = nil
 
 function change_tab(i)
   i = clamp(i, 1, #tabs)
@@ -79,6 +80,7 @@ function change_tab(i)
   numbers = tabs.active.numbers
   selection = tabs.active.selection
   completion = tabs.active.completion
+  search = tabs.active.search
   text:update(numbers.start)
 end
 
@@ -256,6 +258,9 @@ function love.keypressed(key)
         cursor.position = selection:remove(text, cursor.position)
       end
     elseif key == 'v' then
+      if selection.active then
+        cursor.position = selection:remove(text, cursor.position)
+      end
       local ins = love.system.getClipboardText()  
       text:insert(ins, cursor.position[3])
       cursor.position[2] = cursor.position[2] + #ins
@@ -301,12 +306,13 @@ function love.keypressed(key)
         cursor.position[2] = 0
         update_cursor()
         local l_beg_pos = cursor.position[3]
-        for i=l1, l2 do
+        for i=l1,l2 do
           text:insert(tab_replacement, l_beg_pos)
           l_beg_pos = l_beg_pos + #text:get_line(i) + 1
         end
       else
         text:insert(tab_replacement, cursor.position[3] - cursor.position[2])
+        cursor.position[2] = cursor.position[2]
       end
     elseif key == '[' then
       if selection.active then
@@ -332,26 +338,35 @@ function love.keypressed(key)
           text:remove(line_beg + j, line_beg + k)
         end
       end
+    elseif key == 'f' then
+      local word = selection:str(text.str, cursor.position[3])
+      if #word > 0 and word ~= search.prev_word then
+        search:reset()
+      end
+      if #search.positions == 0 then
+        search:fill(word, text)
+      end
+      cursor.position = search:next() or cursor.position
     end
 --------------------------------------------------------------------------------------------------- alt
   elseif love.keyboard.isDown('lalt') then
     if key == 'left' then
       cursor.position[2] = clamp(cursor.position[2] - 1, 0, #text:get_line(cursor.position[1]))
-      cursor.position[2] = text:find_word_beg(cursor)
+      cursor.position[2] = text:find_word_beg(cursor.position)
     elseif key == 'right' then
       cursor.position[2] = clamp(cursor.position[2] + 1, 0, #text:get_line(cursor.position[1]))
-      cursor.position[2] = text:find_word_end(cursor)
+      cursor.position[2] = text:find_word_end(cursor.position)
     elseif key == 'up' then
       cursor.position[1] = cursor.position[1] - lines_on_screen()
     elseif key == 'down' then
       cursor.position[1] = cursor.position[1] + lines_on_screen()
     elseif key == 'backspace' then
-      local toremove = cursor.position[2] - text:find_word_beg(cursor)
+      local toremove = cursor.position[2] - text:find_word_beg(cursor.position)
       text:remove(cursor.position[3] - toremove + 1, cursor.position[3])
       cursor.position[2] = cursor.position[2] - toremove
     elseif key == 'return' then
-      local wb = text:find_word_beg(cursor)
-      local we = text:find_word_end(cursor)
+      local wb = text:find_word_beg(cursor.position)
+      local we = text:find_word_end(cursor.position)
       local word = text:get_line(cursor.position[1]):sub(wb + 1, we)
       if not completion:contains(word) then
         completion:reset()
@@ -397,8 +412,9 @@ function love.keypressed(key)
       local line = text:get_line(cursor.position[1])
       if selection.active then
         cursor.position = selection:remove(text, cursor.position)
-      elseif line:sub(cursor.position[2] - #tab_replacement, cursor.position[2]) == tab_replacement then
+      elseif line:find(tab_replacement, cursor.position[2] - #tab_replacement + 1) then
         text:remove(cursor.position[3] - #tab_replacement + 1, cursor.position[3])
+        cursor.position[2] = cursor.position[2] - #tab_replacement
       else
         if cursor.position[2] == 0 then 
           cursor.position[2] = #text:get_line(cursor.position[1] - 1)
@@ -478,10 +494,10 @@ function love.mousepressed(mx, my, button, istouch, presses)
   if presses == 1 then
     selection:set_beg(cursor.position)
   elseif presses == 2 then
-    cursor.position[2] = text:find_word_beg(cursor)
+    cursor.position[2] = text:find_word_beg(cursor.positions)
     update_cursor()
     selection:set_beg(cursor.position)
-    cursor.position[2] = text:find_word_end(cursor)
+    cursor.position[2] = text:find_word_end(cursor.position)
   elseif presses == 3 then
     selection.beg_pos = {cursor.position[1], 0, cursor.position[3] - cursor.position[2]}
     cursor.position[2] = #text:get_line(cursor.position[1])
@@ -519,6 +535,5 @@ end
 1. check and highlight unmatched parenthesis
 3. go to line (status bar)
 4. line wrapping
-5. search in text
 
 ]]
