@@ -1,18 +1,19 @@
 function Text()
-  local new = {}
-  new.str = ''
-  new.dirty = false
+  local text = {}
+  text.str = ''
+  text.dirty = false
   
-  function new:get_line(n)
+  function text:get_line(n)
     local line_beg = 0
     for i=1,n-1 do
       line_beg = self.str:find('\n', line_beg+1)
+      if line_beg == nil then return nil end
     end
     local line_end = self.str:find('\n', line_beg+1) or 1
     return self.str:sub(line_beg+1, line_end-1)
   end
 
-  function new:count_lines()
+  function text:count_lines()
     local res = 0
     for _line in self.str:gmatch('\n') do
       res = res + 1
@@ -20,7 +21,7 @@ function Text()
     return res
   end
 
-  function new:insert(t, pos)
+  function text:insert(t, pos)
     local before = self.str:sub(1, pos)
     local after  = self.str:sub(pos + 1, -1)
     self.str = before..t..after
@@ -28,7 +29,7 @@ function Text()
     self:update(prev_first_line)
   end
 
-  function new:remove(pos1, pos2)
+  function text:remove(pos1, pos2)
     pos1 = clamp(pos1-1, 0, pos1-1)
     pos2 = clamp(pos2+1, pos2+1, #self.str)
     local before = self.str:sub(1, pos1)
@@ -38,7 +39,7 @@ function Text()
     self:update(prev_first_line)
   end
 
-  function new:highlight(first_line)
+  function text:highlight(first_line)
     local str = ''
     local i = 1
     for line in self.str:gmatch('.-\n') do
@@ -46,7 +47,7 @@ function Text()
         str = str..line
       end
       if i > first_line + lines_on_screen() then break end
-      i = i+1
+      i = i + 1
     end
     if self.mode == nil then
       return str
@@ -93,28 +94,28 @@ function Text()
   prev_first_line = 0
   highlighted = {}
   
-  function new:update(first_line, optional)
+  function text:update(first_line, optional)
     if (not optional) or first_line ~= prev_first_line then
       highlighted = self:highlight(first_line)
     end
     prev_first_line = first_line
   end
   
-  function new:draw(x,y)
+  function text:draw(x, y)
     love.graphics.print(highlighted, x, y)
   end
 
-  function new:find_word_end(cursor_pos)
+  function text:find_word_end(cursor_pos)
     local line = self:get_line(cursor_pos[1])..' '
     local i,j = line:find('.-'..separators, cursor_pos[2] + 1)
     return (j or #line) - 1
   end
 
-  function new:find_word_beg(cursor_pos)
+  function text:find_word_beg(cursor_pos)
     local line = self:get_line(cursor_pos[1]):sub(1, cursor_pos[2])
     local i,j = line:find('.*'..separators)
-    return (j or 1) - 1
+    return (j or 0) - 1
   end
 
-  return new
+  return text
 end

@@ -1,4 +1,3 @@
-
 --------------------------------------------------------------------------------------------------- globals
 separators = '[#%s%+%-=%*/:;%%,%.%(%)%[%]{}\'\"]'
 
@@ -8,6 +7,7 @@ end
 
 require 'tab'
 local highlight = require 'highlight'
+
 
 --------------------------------------------------------------------------------------------------- utils
 function id(x) 
@@ -81,7 +81,7 @@ function change_tab(i)
   selection = tabs.active.selection
   completion = tabs.active.completion
   search = tabs.active.search
-  text:update(numbers.start)
+  text:update(numbers.first)
 end
 
 function new_tab(directory)
@@ -109,7 +109,7 @@ function open_file(path)
   end
   text.mode = highlight[file_ext]
   love.window.setTitle(path)
-  text:update(numbers.start)
+  text:update(numbers.first)
 end
 
 function open_directory(path)
@@ -119,12 +119,12 @@ function open_directory(path)
   directory = path
   text.mode = nil
   love.window.setTitle(path)
-  text:update(numbers.start)
+  text:update(numbers.first)
 end
 
 function open(path)
   cursor:reset()
-  numbers.start = 1
+  numbers.first = 1
   if path == '..' then
     local i,j = directory:sub(1, #directory-1):find('.*/')
     if j == nil then return end
@@ -184,20 +184,20 @@ function love.update(dt)
   if love.timer.getFPS() > 80 then
     sleep = sleep + 1e-5
   end
-  text:update(numbers.start, true)
+  text:update(numbers.first, true)
 end
 
 function update_cursor()
   cursor:update(text)
   local offscreen = 0
-  local lower_bound = numbers.start
-  local upper_bound = numbers.start + lines_on_screen() - 3
+  local lower_bound = numbers.first
+  local upper_bound = numbers.first + lines_on_screen() - 3
   if cursor.position[1] >= upper_bound then
     offscreen = cursor.position[1] - upper_bound
   elseif cursor.position[1] <= lower_bound then
     offscreen = cursor.position[1] - lower_bound
   end
-  numbers.start = numbers.start + offscreen
+  numbers.first = numbers.first + offscreen
 end
 
 --------------------------------------------------------------------------------------------------- draw
@@ -288,7 +288,7 @@ function love.keypressed(key)
       active_tab_i = 1 + (active_tab_i-1) % #tabs
       tabs.active = tabs[active_tab_i]
       cursor:reset()
-      numbers.start = 1
+      numbers.first = 1
       if tabs.active.file then 
         open_file(tabs.active.file)
       else
@@ -361,8 +361,8 @@ function love.keypressed(key)
     elseif key == 'down' then
       cursor.position[1] = cursor.position[1] + lines_on_screen()
     elseif key == 'backspace' then
-      local toremove = cursor.position[2] - text:find_word_beg(cursor.position)
-      text:remove(cursor.position[3] - toremove + 1, cursor.position[3])
+      local toremove = cursor.position[2] - text:find_word_beg(cursor.position) - 1
+      text:remove(cursor.position[3] - toremove, cursor.position[3])
       cursor.position[2] = cursor.position[2] - toremove
     elseif key == 'return' then
       local wb = text:find_word_beg(cursor.position)
@@ -450,7 +450,7 @@ function love.keypressed(key)
       selection:set_beg(cursor.position)
     end
   end
-  text:update(numbers.start)
+  text:update(numbers.first)
   update_cursor()
 end
 
@@ -478,13 +478,13 @@ end
 
 --------------------------------------------------------------------------------------------------- mouse
 function love.wheelmoved(x,y)
-  numbers.start = clamp(numbers.start + y, 1, text:count_lines())
+  numbers.first = clamp(numbers.first + y, 1, text:count_lines())
 end
 
 function love.mousepressed(mx, my, button, istouch, presses)
   if mx > numbers.width then
     cursor.position = {
-      numbers.start + math.floor((my - tabs.height) / font:getHeight()),
+      numbers.first + math.floor((my - tabs.height) / font:getHeight()),
       math.floor((mx - numbers.width) / font:getWidth(' ')),
       0
     }
@@ -494,7 +494,7 @@ function love.mousepressed(mx, my, button, istouch, presses)
   if presses == 1 then
     selection:set_beg(cursor.position)
   elseif presses == 2 then
-    cursor.position[2] = text:find_word_beg(cursor.positions)
+    cursor.position[2] = text:find_word_beg(cursor.position) + 1
     update_cursor()
     selection:set_beg(cursor.position)
     cursor.position[2] = text:find_word_end(cursor.position)
@@ -508,7 +508,7 @@ end
 function love.mousemoved(mx, my, dx, dy)
   if love.mouse.isDown(1) then
     cursor.position = {
-      numbers.start + math.floor((my - tabs.height) / font:getHeight()),
+      numbers.first + math.floor((my - tabs.height) / font:getHeight()),
       math.floor((mx - numbers.width) / font:getWidth(' '))
     }
     update_cursor()
@@ -516,7 +516,7 @@ function love.mousemoved(mx, my, dx, dy)
 end
 
 function love.wheelmoved(x,y)
-  numbers.start = clamp(numbers.start - y, 1, text:count_lines())
+  numbers.first = clamp(numbers.first - y, 1, text:count_lines())
 end
 
 --------------------------------------------------------------------------------------------------- file drop

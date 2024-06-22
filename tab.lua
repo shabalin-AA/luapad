@@ -40,7 +40,7 @@ function Tab(directory, file)
     self.selection:draw(font, self.cursor, self.numbers, y)
     -- text
     love.graphics.setColor({1,1,1})
-    self.text:draw(x + self.numbers.width, y)
+    self.text:draw(x + self.numbers.width, y, self.numbers.first, wrap)
     -- cursor
     love.graphics.setColor(text_color)
     self.cursor:draw(self.numbers, font, y)
@@ -57,7 +57,7 @@ function Tab(directory, file)
     love.graphics.rectangle(
       'fill', 
       love.graphics.getWidth() - scroll_width,
-      y + height * (self.numbers.start-1) / lines_total,
+      y + height * (self.numbers.first-1) / lines_total,
       scroll_width,
       height * lines_on_screen() / lines_total
     )
