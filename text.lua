@@ -1,6 +1,5 @@
 local highlight = require 'highlight'
 
-
 Text = {}
 
 function Text:get_line(n)
