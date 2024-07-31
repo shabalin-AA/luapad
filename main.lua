@@ -1,4 +1,4 @@
---------------------------------------------------------------------------------------------------- globals
+--------------------------------------------------------------------------------------------------- globals times
 separators = '[#%s%+%-=%*/:;%%,%.%(%)%[%]{}\'\"]'
 
 function lines_on_screen()
@@ -6,8 +6,7 @@ function lines_on_screen()
 end
 
 require 'tab'
-local highlight = require 'highlight'
-
+local utf8 = require 'utf8'
 
 --------------------------------------------------------------------------------------------------- utils
 function id(x) 
@@ -85,7 +84,7 @@ function change_tab(i)
 end
 
 function new_tab(directory)
-  local tab = Tab(directory, nil)
+  local tab = Tab:new(directory, nil)
   table.insert(tabs, tab)
   change_tab(#tabs)
   open_directory(directory)
@@ -101,20 +100,21 @@ end
 function open_file(path)
   tabs.active.file = path
   file = path
-  text.str = read_file(path):gsub('\t', tab_replacement)..'\n'
+  text:clear()
+  text:insert(read_file(path):gsub('\t', tab_replacement)..'\n', 0)
   local i,j = path:find('.+%.')
   local file_ext = nil
   if j then 
     file_ext = path:sub(j+1, -1)
   end
-  text.mode = highlight[file_ext]
-  love.window.setTitle(path)
+  text.mode = file_ext
   text:update(numbers.first)
 end
 
 function open_directory(path)
   local content = execute('ls -a '..path)
-  text.str = content
+  text:clear()
+  text:insert(content, 0)
   tabs.active.directory = path
   directory = path
   text.mode = nil
@@ -153,10 +153,10 @@ end
 
 --------------------------------------------------------------------------------------------------- load
 function load_config()
-  local home = '/Users/'..current_user()..'/'
+  local home = love.filesystem.getUserDirectory()
   local config_file_path = '.luapad.conf.lua'
   local config_content = read_file(home..config_file_path)
-  write_file(love.filesystem.getAppdataDirectory()..'/'..'config.lua', config_content)
+  local  success, message = love.filesystem.write('config.lua', config_content, #config_content)
   require('config')
   -- config variables
   tab_replacement = tab_replacement or '    '
@@ -173,18 +173,9 @@ function love.load()
 end
 
 --------------------------------------------------------------------------------------------------- update
-function sleep(a)
-  local sec = tonumber(os.clock() + a)
-  while os.clock() < sec do end
-end
-
-local sleep = 0
 function love.update(dt)
-  love.timer.sleep(sleep)
-  if love.timer.getFPS() > 80 then
-    sleep = sleep + 1e-5
-  end
   text:update(numbers.first, true)
+  numbers:update()
 end
 
 function update_cursor()
@@ -204,6 +195,7 @@ end
 function love.draw()
   tabs.width = love.graphics.getWidth() / #tabs
   tabs.height = tabs.font:getHeight()
+  tabs.active:draw(0, tabs.height)
   for i,v in ipairs(tabs) do
     local x = (i-1)*tabs.width
     local y = 0
@@ -219,7 +211,6 @@ function love.draw()
     local title = v:title()
     love.graphics.printf(title, tabs.font, x, y, tabs.width, 'center')
   end
-  tabs.active:draw(0, tabs.height)
 end
 
 function love.keypressed(key)
@@ -244,7 +235,7 @@ function love.keypressed(key)
       cursor.position[1] = 1
       cursor.position[2] = 0
     elseif key == 'down' then
-      cursor.position[1] = text:count_lines()
+      cursor.position[1] = text.lines
       cursor.position[2] = #text:get_line(cursor.position[1])
     elseif key == 'v' then
       local ins = love.system.getClipboardText()
@@ -256,6 +247,7 @@ function love.keypressed(key)
       if selection.active then
         love.system.setClipboardText(selection:str(text.str, cursor.position[3]))
         cursor.position = selection:remove(text, cursor.position)
+        selection.active = false
       end
     elseif key == 'v' then
       if selection.active then
@@ -264,6 +256,15 @@ function love.keypressed(key)
       local ins = love.system.getClipboardText()  
       text:insert(ins, cursor.position[3])
       cursor.position[2] = cursor.position[2] + #ins
+    elseif key == 'a' then
+      selection.active = true
+      selection.beg_pos = {1,0,0}
+      local last_line = text.lines
+      cursor.position = {
+        last_line,
+        #text:get_line(last_line),
+        #text.str
+      }
     elseif key == 'backspace' then
       text:remove(cursor.position[3] - cursor.position[2] + 1, cursor.position[3])
       cursor.position[2] = 0
@@ -273,6 +274,9 @@ function love.keypressed(key)
       new_tab(directory)
     elseif key == 'w' then
       love.event.clear()
+      if #tabs == 0 then
+        love.event.push('quit')
+      end
       local active_tab_i = 0
       for i,v in ipairs(tabs) do
         if v == tabs.active then
@@ -280,20 +284,10 @@ function love.keypressed(key)
           break
         end
       end
+      local new_active = active_tab_i - 1
+      new_active = 1 + (new_active-1) % #tabs
+      change_tab(new_active)
       table.remove(tabs, active_tab_i)
-      if #tabs == 0 then
-        love.event.push('quit', 0)
-      end
-      active_tab_i = active_tab_i - 1
-      active_tab_i = 1 + (active_tab_i-1) % #tabs
-      tabs.active = tabs[active_tab_i]
-      cursor:reset()
-      numbers.first = 1
-      if tabs.active.file then 
-        open_file(tabs.active.file)
-      else
-        open_directory(tabs.active.directory)
-      end
     elseif key == 'd' then
       local str_content = text:get_line(cursor.position[1])
       text:insert('\n'..str_content, cursor.position[3])
@@ -339,12 +333,13 @@ function love.keypressed(key)
         end
       end
     elseif key == 'f' then
-      local word = selection:str(text.str, cursor.position[3])
-      if #word > 0 and word ~= search.prev_word then
-        search:reset()
-      end
-      if #search.positions == 0 then
-        search:fill(word, text)
+      if selection.active then
+        local word = selection:str(text.str, cursor.position[3])
+        selection.active = false      
+        if #word > 0 and word ~= search.prev_word then
+          search:reset()
+          search:fill(word, text)
+        end
       end
       cursor.position = search:next() or cursor.position
     end
@@ -352,7 +347,7 @@ function love.keypressed(key)
   elseif love.keyboard.isDown('lalt') then
     if key == 'left' then
       cursor.position[2] = clamp(cursor.position[2] - 1, 0, #text:get_line(cursor.position[1]))
-      cursor.position[2] = text:find_word_beg(cursor.position)
+      cursor.position[2] = text:find_word_beg(cursor.position) - 1
     elseif key == 'right' then
       cursor.position[2] = clamp(cursor.position[2] + 1, 0, #text:get_line(cursor.position[1]))
       cursor.position[2] = text:find_word_end(cursor.position)
@@ -361,13 +356,15 @@ function love.keypressed(key)
     elseif key == 'down' then
       cursor.position[1] = cursor.position[1] + lines_on_screen()
     elseif key == 'backspace' then
-      local toremove = cursor.position[2] - text:find_word_beg(cursor.position) - 1
-      text:remove(cursor.position[3] - toremove, cursor.position[3])
-      cursor.position[2] = cursor.position[2] - toremove
+      local line_beg = cursor.position[3] - cursor.position[2]
+      local word_beg = text:find_word_beg(cursor.position)
+      text:remove(line_beg + word_beg, cursor.position[3])
+      cursor.position[2] = word_beg - 1
+      cursor.position[3] = line_beg + cursor.position[2]
     elseif key == 'return' then
       local wb = text:find_word_beg(cursor.position)
       local we = text:find_word_end(cursor.position)
-      local word = text:get_line(cursor.position[1]):sub(wb + 1, we)
+      local word = text:get_line(cursor.position[1]):sub(wb, we)
       if not completion:contains(word) then
         completion:reset()
       end
@@ -375,14 +372,15 @@ function love.keypressed(key)
         completion:fill(word, text.str)
       end
       -- remove old word
-      local toremove = cursor.position[2] - wb
-      text:remove(cursor.position[3] - toremove + 1, cursor.position[3])
-      cursor.position[2] = wb
-      cursor.position[3] = cursor.position[3] - toremove
+      local line_beg = cursor.position[3] - cursor.position[2]
+      text:remove(line_beg + wb, cursor.position[3])
+      cursor.position[2] = wb - 1
+      cursor.position[3] = line_beg + cursor.position[2]
       -- insert completion word
       local ins = completion:next()
       text:insert(ins, cursor.position[3])
       cursor.position[2] = cursor.position[2] + #ins
+    else
     end
 --------------------------------------------------------------------------------------------------- ctrl
   elseif love.keyboard.isDown('lctrl') then
@@ -417,8 +415,10 @@ function love.keypressed(key)
         cursor.position[2] = cursor.position[2] - #tab_replacement
       else
         if cursor.position[2] == 0 then 
-          cursor.position[2] = #text:get_line(cursor.position[1] - 1)
-          cursor.position[1] = cursor.position[1] - 1
+          if cursor.position[1] ~= 1 then
+            cursor.position[2] = #text:get_line(cursor.position[1] - 1)
+            cursor.position[1] = cursor.position[1] - 1
+          else return end
         else
           cursor.position[2] = cursor.position[2] - 1
         end
@@ -443,6 +443,10 @@ function love.keypressed(key)
       tabs.active.file = nil
       open_directory(tabs.active.directory)
     end
+    if not (love.keyboard.isDown('lshift') or key == 'lshift') then
+      selection.active = false
+      selection:set_beg(cursor.position)
+    end
   end
   if love.keyboard.isDown('lshift') then
     if not selection.active then
@@ -454,16 +458,9 @@ function love.keypressed(key)
   update_cursor()
 end
 
---------------------------------------------------------------------------------------------------- key input
-function love.keyreleased(key, isrepeat)
-  if not (love.keyboard.isDown('lshift') or key == 'lshift') then
-    selection.active = false
-    selection:set_beg(cursor.position)
-  end
-end
-
+--------------------------------------------------------------------------------------------------- textinput
 function love.textinput(t)
-  if not tabs.active.file then return end
+  if not file then return end
   if love.keyboard.isDown('lshift') then
     selection.active = false
   end
@@ -471,14 +468,16 @@ function love.textinput(t)
     cursor.position = selection:remove(text, cursor.position)
     selection.active = false
   end
-  text:insert(t, cursor.position[3])
-  cursor.position[2] = cursor.position[2] + #t
+  if #t == utf8.len(t) then
+    text:insert(t, cursor.position[3])
+    cursor.position[2] = cursor.position[2] + #t
+  end
   update_cursor()
 end
 
 --------------------------------------------------------------------------------------------------- mouse
 function love.wheelmoved(x,y)
-  numbers.first = clamp(numbers.first + y, 1, text:count_lines())
+  numbers.first = clamp(numbers.first + y, 1, text.lines)
 end
 
 function love.mousepressed(mx, my, button, istouch, presses)
@@ -494,7 +493,7 @@ function love.mousepressed(mx, my, button, istouch, presses)
   if presses == 1 then
     selection:set_beg(cursor.position)
   elseif presses == 2 then
-    cursor.position[2] = text:find_word_beg(cursor.position) + 1
+    cursor.position[2] = text:find_word_beg(cursor.position) - 1
     update_cursor()
     selection:set_beg(cursor.position)
     cursor.position[2] = text:find_word_end(cursor.position)
@@ -516,7 +515,7 @@ function love.mousemoved(mx, my, dx, dy)
 end
 
 function love.wheelmoved(x,y)
-  numbers.first = clamp(numbers.first - y, 1, text:count_lines())
+  numbers.first = clamp(numbers.first - y, 1, text.lines)
 end
 
 --------------------------------------------------------------------------------------------------- file drop

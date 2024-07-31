@@ -76,9 +76,9 @@ highlight.lua = {
   { to_hl = '%a[%a%d_]*', rule = attr_rule, color = attr_color},
   { to_hl = '%a[%a%d_]*', rule = fn_rule,   color = fn_color},
   { to_hl = '%d+',     rule = number_rule, color = number_color},
-  { to_hl = '%d+.%d+', rule = number_rule, color = number_color},
+  { to_hl = '%d+%.%d+', rule = number_rule, color = number_color},
   { to_hl = '%d+e%-?%d+', rule = number_rule, color = number_color},
-  { to_hl = '%d+.%d+e%-?%d+', rule = number_rule, color = number_color},
+  { to_hl = '%d+%.%d+e%-?%d+', rule = number_rule, color = number_color},
 }
 
 highlight.c = {
@@ -118,6 +118,7 @@ highlight.c = {
   { to_hl = 'unsigned', rule = kw_rule, color = kw_color },
   { to_hl = 'void',     rule = kw_rule, color = kw_color },
   { to_hl = 'bool',     rule = kw_rule, color = kw_color },
+  { to_hl = 'NULL',     rule = kw_rule, color = kw_color },
   { to_hl = 'volatile', rule = kw_rule, color = kw_color },
   { to_hl = '#include', rule = kw_rule, color = kw_color },
   { to_hl = '#define',  rule = kw_rule, color = kw_color },
