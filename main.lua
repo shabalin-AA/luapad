@@ -85,6 +85,7 @@ end
 
 function new_tab(directory)
   local tab = Tab:new(directory, nil)
+  tab.drawable_title = love.graphics.newText(tabs.font)
   table.insert(tabs, tab)
   change_tab(#tabs)
   open_directory(directory)
@@ -102,6 +103,7 @@ function open_file(path)
   file = path
   text:clear()
   text:insert(read_file(path):gsub('\t', tab_replacement)..'\n', 0)
+  text.dirty = false
   local i,j = path:find('.+%.')
   local file_ext = nil
   if j then 
@@ -115,6 +117,7 @@ function open_directory(path)
   local content = execute('ls -a '..path)
   text:clear()
   text:insert(content, 0)
+  text.dirty = false
   tabs.active.directory = path
   directory = path
   text.mode = nil
@@ -193,7 +196,15 @@ end
 
 --------------------------------------------------------------------------------------------------- draw
 function love.draw()
-  tabs.width = love.graphics.getWidth() / #tabs
+  local new_width = love.graphics.getWidth() / #tabs
+  if new_width ~= tabs.width then
+    -- drawable_title must be updated because of new header width
+    -- prev_title==nil will cause title ~= v.prev_title and drawable_title will be rerendered
+    for i,v in ipairs(tabs) do
+      v.prev_title = nil
+    end
+  end
+  tabs.width = new_width
   tabs.height = tabs.font:getHeight()
   tabs.active:draw(0, tabs.height)
   for i,v in ipairs(tabs) do
@@ -209,7 +220,12 @@ function love.draw()
       love.graphics.setColor(comment_color)
     end
     local title = v:title()
-    love.graphics.printf(title, tabs.font, x, y, tabs.width, 'center')
+    if title ~= v.prev_title then
+      v.drawable_title:setf(title, tabs.width, 'center')
+      v.prev_title = title
+    end
+    love.graphics.draw(v.drawable_title, x, y)
+    --love.graphics.printf(title, tabs.font, x, y, tabs.width, 'center')
   end
 end
 
@@ -274,7 +290,7 @@ function love.keypressed(key)
       new_tab(directory)
     elseif key == 'w' then
       love.event.clear()
-      if #tabs == 0 then
+      if #tabs == 1 then
         love.event.push('quit')
       end
       local active_tab_i = 0

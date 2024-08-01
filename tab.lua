@@ -18,7 +18,7 @@ function Tab:title()
   return res
 end
 
-function Tab:draw(x, y)
+function Tab:draw(x, y, header_width, header_font)
   -- back
   love.graphics.setColor(back_color)
   local width = love.graphics.getWidth() - x
@@ -70,5 +70,6 @@ function Tab:new(directory, file)
   new.selection = Selection:new()
   new.completion = Completion:new()
   new.search = Search:new()
+  new.drawable_title = nil
   return new
 end
