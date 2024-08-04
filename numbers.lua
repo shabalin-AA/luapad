@@ -19,6 +19,7 @@ end
 local prev_first = 0
 function Numbers:update()
   if self.first ~= prev_first then
+    self.drawable_text:setFont(font)
     self.drawable_text:setf(self:str(), self.width, 'right')
   end
 end

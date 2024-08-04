@@ -108,6 +108,7 @@ highlighted = {}
 function Text:update(first_line, optional)
   if (not optional) or first_line ~= prev_first_line then
     highlighted = self:highlight(first_line)
+    self.drawable_text:setFont(font)
     self.drawable_text:set(highlighted)
   end
   prev_first_line = first_line
