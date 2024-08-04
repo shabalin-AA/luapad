@@ -95,6 +95,8 @@ function update_font()
   font_size = clamp(font_size, 2, 60)
   font = love.graphics.newFont(font_file, font_size)
   love.graphics.setFont(font)
+  if text then text.drawable_text:setFont(font) end
+  if numbers then numbers.drawable_text:setFont(font) end
 end
 
 --------------------------------------------------------------------------------------------------- opens
