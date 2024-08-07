@@ -39,7 +39,7 @@ function Tab:draw(x, y, header_width, header_font)
   self.text:draw(x + self.numbers.width, y, self.numbers.first, wrap)
   -- cursor
   love.graphics.setColor(text_color)
-  self.cursor:draw(self.numbers, font, y)
+  self.cursor:draw(self.numbers, font, y, self.text)
   local position_text = table.concat(self.cursor.position, ':')
   love.graphics.print(
     position_text, 

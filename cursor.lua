@@ -9,10 +9,11 @@ function Cursor:blink()
   return 0 < elapsed and elapsed < 0.05 
 end
 
-function Cursor:draw(numbers, font, y_offset)
+function Cursor:draw(numbers, font, y_offset, text)
   if self:blink() then
     love.graphics.setLineWidth(1)
-    local x = numbers.width + self.position[2] * font:getWidth(' ')
+    local cur_line = text:get_line(self.position[1])
+    local x = numbers.width + font:getWidth(cur_line:sub(0, self.position[2]))
     local y1 = (self.position[1] - numbers.first + 0)*font:getHeight() + y_offset
     local y2 = (self.position[1] - numbers.first + 1)*font:getHeight() + y_offset
     love.graphics.line(x,y1,x,y2)
@@ -33,7 +34,7 @@ end
 
 
 function Cursor:new()
-  local new = setmetatable({}, {__index = Cursor})
+  local new = setmetatable({}, {__index = self})
   new.position = {1,0,0} -- line, char in line, char in whole text
   new.t = os.clock() -- for blinking
   return new
