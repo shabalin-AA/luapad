@@ -25,7 +25,7 @@ function love.conf(t)
     t.window.depth = nil                -- The number of bits per sample in the depth buffer
     t.window.stencil = nil              -- The number of bits per sample in the stencil buffer
     t.window.display = 1                -- Index of the monitor to show the window in (number)
-    t.window.highdpi = true            -- Enable high-dpi mode for the window on a Retina display (boolean)
+    t.window.highdpi = true             -- Enable high-dpi mode for the window on a Retina display (boolean)
     t.window.usedpiscale = true         -- Enable automatic DPI scaling when highdpi is set to true as well (boolean)
     t.window.x = nil                    -- The x-coordinate of the window's position in the specified display (number)
     t.window.y = nil                    -- The y-coordinate of the window's position in the specified display (number)
@@ -44,7 +44,7 @@ function love.conf(t)
     t.modules.sound = false              -- Enable the sound module (boolean)
     t.modules.system = true             -- Enable the system module (boolean)
     t.modules.thread = false             -- Enable the thread module (boolean)
-    t.modules.timer = false             -- Enable the timer module (boolean), Disabling it will result 0 delta time in love.update
+    t.modules.timer = true             -- Enable the timer module (boolean), Disabling it will result 0 delta time in love.update
     t.modules.touch = false              -- Enable the touch module (boolean)
     t.modules.video = false              -- Enable the video module (boolean)
     t.modules.window = true             -- Enable the window module (boolean)

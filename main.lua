@@ -225,7 +225,6 @@ function love.draw()
       v.prev_title = title
     end
     love.graphics.draw(v.drawable_title, x, y)
-    --love.graphics.printf(title, tabs.font, x, y, tabs.width, 'center')
   end
 end
 
@@ -424,9 +423,10 @@ function love.keypressed(key)
       cursor.position[1] = cursor.position[1] + 1
     elseif key == 'backspace' then
       local line = text:get_line(cursor.position[1])
+      local i,j = line:find('%s*')
       if selection.active then
         cursor.position = selection:remove(text, cursor.position)
-      elseif line:find(tab_replacement, cursor.position[2] - #tab_replacement + 1) then
+      elseif cursor.position[2] > i and cursor.position[2] <= j then
         text:remove(cursor.position[3] - #tab_replacement + 1, cursor.position[3])
         cursor.position[2] = cursor.position[2] - #tab_replacement
       else
@@ -470,7 +470,7 @@ function love.keypressed(key)
       selection:set_beg(cursor.position)
     end
   end
-  text:update(numbers.first)
+  text:update(numbers.first, true)
   update_cursor()
 end
 
@@ -550,5 +550,5 @@ end
 1. check and highlight unmatched parenthesis
 3. go to line (status bar)
 4. line wrapping
-
+backspace
 ]]
